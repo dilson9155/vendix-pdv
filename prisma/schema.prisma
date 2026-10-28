@@ -1,0 +1,1265 @@
+// Vendix — modelo de dados SaaS multiempresa.
+// Regras gerais:
+//  - Toda entidade de negócio carrega tenantId (e branchId quando operacional).
+//  - Valores monetários usam Decimal(14,2); quantidades usam Decimal(14,3).
+//  - Exclusões físicas são evitadas em histórico financeiro (status/cancelamento).
+//  - Uniques são sempre escopadas por tenantId.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Plataforma SaaS
+// ---------------------------------------------------------------------------
+
+enum TenantStatus {
+  ATIVO
+  SUSPENSO
+  CANCELADO
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ATIVA
+  VENCIDA
+  SUSPENSA
+  CANCELADA
+}
+
+enum ChargeStatus {
+  PENDENTE
+  PAGA
+  VENCIDA
+  CANCELADA
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(12, 2)
+  trialDays   Int      @default(14)
+  maxUsers    Int?
+  maxBranches Int?
+  maxProducts Int?
+  features    Json     @default("[]")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenants       Tenant[]
+  subscriptions Subscription[]
+  charges       TenantCharge[]
+
+  @@map("plans")
+}
+
+model Tenant {
+  id          String       @id @default(cuid())
+  name        String
+  legalName   String?
+  document    String?
+  email       String?
+  phone       String?
+  logoUrl     String?
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  status      TenantStatus @default(ATIVO)
+  planId      String?
+  plan        Plan?        @relation(fields: [planId], references: [id], onDelete: SetNull)
+  trialEndsAt DateTime?
+  notes       String?      @db.Text
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  branches        Branch[]
+  users           User[]
+  roles           Role[]
+  subscription    Subscription?
+  charges         TenantCharge[]
+  settings        TenantSetting[]
+  customers       Customer[]
+  suppliers       Supplier[]
+  categories      ProductCategory[]
+  brands          Brand[]
+  products        Product[]
+  variants        ProductVariant[]
+  barcodes        ProductBarcode[]
+  stockLevels     StockLevel[]
+  stockMovements  StockMovement[]
+  sales           Sale[]
+  saleItems       SaleItem[]
+  salePayments    SalePayment[]
+  saleReturns     SaleReturn[]
+  cashSessions    CashSession[]
+  cashMovements   CashMovement[]
+  financialAccounts FinancialAccount[]
+  transfers       AccountTransfer[]
+  ledgerEntries   LedgerEntry[]
+  payables        Payable[]
+  payablePayments PayablePayment[]
+  receivables     Receivable[]
+  receivablePayments ReceivablePayment[]
+  chartAccounts   ChartAccount[]
+  costCenters     CostCenter[]
+  paymentMethods  PaymentMethod[]
+  auditLogs       AuditLog[]
+  receiptTokens   ReceiptToken[]
+  whatsappLogs    WhatsAppLog[]
+  integrations    Integration[]
+  apiKeys         ApiKey[]
+
+  @@index([status])
+  @@index([planId])
+  @@map("tenants")
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  tenantId           String             @unique
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId             String
+  plan               Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  status             SubscriptionStatus @default(TRIAL)
+  startedAt          DateTime           @default(now())
+  trialEndsAt        DateTime?
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  canceledAt         DateTime?
+  canceledReason     String?            @db.Text
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([status])
+  @@index([planId])
+  @@map("subscriptions")
+}
+
+model TenantCharge {
+  id             String      @id @default(cuid())
+  tenantId       String
+  tenant         Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planId         String?
+  plan           Plan?       @relation(fields: [planId], references: [id], onDelete: SetNull)
+  description    String
+  referenceMonth String
+  amount         Decimal     @db.Decimal(12, 2)
+  dueDate        DateTime
+  status         ChargeStatus @default(PENDENTE)
+  paidAt         DateTime?
+  notes          String?     @db.Text
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  @@index([tenantId, referenceMonth])
+  @@index([status, dueDate])
+  @@map("tenant_charges")
+}
+
+enum NoticeLevel {
+  INFO
+  ALERTA
+  URGENTE
+}
+
+model PlatformNotice {
+  id          String      @id @default(cuid())
+  title       String
+  message     String      @db.Text
+  level       NoticeLevel @default(INFO)
+  active      Boolean     @default(true)
+  publishedAt DateTime    @default(now())
+  expiresAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([active, publishedAt])
+  @@map("platform_notices")
+}
+
+// ---------------------------------------------------------------------------
+// Empresa, filiais e usuários
+// ---------------------------------------------------------------------------
+
+enum GenericStatus {
+  ATIVO
+  INATIVO
+}
+
+model Branch {
+  id             String        @id @default(cuid())
+  tenantId       String
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  code           String
+  name           String
+  document       String?
+  isHeadquarters Boolean       @default(false)
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  phone          String?
+  email          String?
+  status         GenericStatus @default(ATIVO)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  users          User[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  sales          Sale[]
+  cashSessions   CashSession[]
+  cashMovements  CashMovement[]
+  ledgerEntries  LedgerEntry[]
+  payables       Payable[]
+  receivables    Receivable[]
+  financialAccounts FinancialAccount[]
+  counters       DocumentCounter[]
+
+  @@unique([tenantId, code])
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@map("branches")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  permissions String[] @default([])
+  system      Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users User[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  tenantId        String?
+  tenant          Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId        String?
+  branch          Branch?   @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  roleId          String?
+  role            Role?     @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  name            String
+  email           String    @unique
+  passwordHash    String
+  phone           String?
+  active          Boolean   @default(true)
+  isPlatformAdmin Boolean   @default(false)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  sales            Sale[]            @relation("SaleOperator")
+  canceledSales    Sale[]            @relation("SaleCanceledBy")
+  cashSessions     CashSession[]     @relation("CashOperator")
+  closedCashSessions CashSession[]   @relation("CashClosedBy")
+  cashMovements    CashMovement[]
+  auditLogs        AuditLog[]
+  passwordResets   PasswordResetToken[]
+  payablePayments  PayablePayment[]
+  receivablePayments ReceivablePayment[]
+  stockMovements   StockMovement[]
+  saleReturns      SaleReturn[]
+
+  @@index([tenantId, active])
+  @@index([branchId])
+  @@map("users")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@map("password_reset_tokens")
+}
+
+model TenantSetting {
+  id       String   @id @default(cuid())
+  tenantId String
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  key      String
+  value    Json?
+  category String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, key])
+  @@map("tenant_settings")
+}
+
+model Integration {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider  String
+  enabled   Boolean  @default(false)
+  /// Configuração cifrada (AES-256-GCM). Nunca exposta ao cliente.
+  config    String?  @db.Text
+  status    String   @default("NAO_CONFIGURADO")
+  lastCheckAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, provider])
+  @@map("integrations")
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  keyHash   String   @unique
+  lastUsedAt DateTime?
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+model DocumentCounter {
+  id       String @id @default(cuid())
+  tenantId String
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  scope    String
+  value    Int    @default(0)
+
+  @@unique([branchId, scope])
+  @@index([tenantId])
+  @@map("document_counters")
+}
+
+// ---------------------------------------------------------------------------
+// Cadastros comerciais
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id         String    @id @default(cuid())
+  tenantId   String
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name       String
+  document   String?
+  phone      String?
+  whatsapp   String?
+  email      String?
+  birthDate  DateTime?
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?
+  notes      String?   @db.Text
+  active     Boolean   @default(true)
+  consentAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  sales       Sale[]
+  receivables Receivable[]
+
+  @@unique([tenantId, document])
+  @@index([tenantId, name])
+  @@index([tenantId, active])
+  @@map("customers")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name      String
+  document  String?
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?  @db.Text
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+  payables Payable[]
+
+  @@unique([tenantId, document])
+  @@index([tenantId, name])
+  @@map("suppliers")
+}
+
+model ProductCategory {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name      String
+  parentId  String?
+  parent    ProductCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  ProductCategory[] @relation("CategoryTree")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+  @@map("product_categories")
+}
+
+model Brand {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name      String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([tenantId, name])
+  @@map("brands")
+}
+
+enum ProductUnit {
+  UN
+  KG
+  LT
+  MT
+  CX
+  PCT
+}
+
+model Product {
+  id          String       @id @default(cuid())
+  tenantId    String
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name        String
+  description String?      @db.Text
+  sku         String
+  barcode     String?
+  categoryId  String?
+  category    ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  brandId     String?
+  brand       Brand?       @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  supplierId  String?
+  supplier    Supplier?    @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  unit        ProductUnit  @default(UN)
+  cost        Decimal      @db.Decimal(14, 2)
+  price       Decimal      @db.Decimal(14, 2)
+  promoPrice  Decimal?     @db.Decimal(14, 2)
+  promoStart  DateTime?
+  promoEnd    DateTime?
+  minStock    Decimal      @default(0) @db.Decimal(14, 3)
+  maxStock    Decimal?     @db.Decimal(14, 3)
+  ncm         String?
+  cest        String?
+  origin      String?
+  trackStock  Boolean      @default(true)
+  hasVariants Boolean      @default(false)
+  imageUrl    String?
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  variants    ProductVariant[]
+  barcodes    ProductBarcode[]
+  stockLevels StockLevel[]
+  stockMovements StockMovement[]
+  saleItems   SaleItem[]
+  returnItems SaleReturnItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@index([tenantId, name])
+  @@index([tenantId, active])
+  @@index([tenantId, categoryId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  sku       String
+  barcode   String?
+  size      String?
+  color     String?
+  model     String?
+  cost      Decimal? @db.Decimal(14, 2)
+  price     Decimal? @db.Decimal(14, 2)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  barcodes    ProductBarcode[]
+  stockLevels StockLevel[]
+  stockMovements StockMovement[]
+  saleItems   SaleItem[]
+  returnItems SaleReturnItem[]
+
+  @@unique([tenantId, sku])
+  @@unique([tenantId, barcode])
+  @@index([productId])
+  @@index([tenantId, color, size])
+  @@map("product_variants")
+}
+
+/// Códigos alternativos (EAN interno, múltiplos códigos por produto/variante).
+model ProductBarcode {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  code      String
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, code])
+  @@index([productId])
+  @@index([variantId])
+  @@map("product_barcodes")
+}
+
+// ---------------------------------------------------------------------------
+// Estoque
+// ---------------------------------------------------------------------------
+
+model StockLevel {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  /// "" quando o produto não possui variações (evita unique com NULL).
+  variantId String   @default("")
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  quantity  Decimal  @default(0) @db.Decimal(14, 3)
+  updatedAt DateTime @updatedAt
+
+  @@unique([branchId, productId, variantId])
+  @@index([tenantId, productId])
+  @@map("stock_levels")
+}
+
+enum StockMovementType {
+  ENTRADA
+  SAIDA
+  AJUSTE
+  TRANSFERENCIA
+  VENDA
+  DEVOLUCAO
+  ESTORNO
+  INVENTARIO
+}
+
+model StockMovement {
+  id         String            @id @default(cuid())
+  tenantId   String
+  tenant     Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId   String
+  branch     Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  productId  String
+  product    Product           @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId  String?
+  variant    ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  type       StockMovementType
+  /// Positivo = entrada, negativo = saída.
+  quantity   Decimal           @db.Decimal(14, 3)
+  unitCost   Decimal?          @db.Decimal(14, 2)
+  balanceAfter Decimal        @db.Decimal(14, 3)
+  reason     String?
+  document   String?
+  saleId     String?
+  userId     String?
+  user       User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime          @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([branchId, productId, createdAt])
+  @@index([saleId])
+  @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Vendas / PDV
+// ---------------------------------------------------------------------------
+
+enum SaleStatus {
+  ABERTA
+  CONCLUIDA
+  CANCELADA
+  DEVOLVIDA_PARCIAL
+  DEVOLVIDA
+}
+
+enum PaymentKind {
+  DINHEIRO
+  PIX
+  DEBITO
+  CREDITO
+  TRANSFERENCIA
+  CREDITO_LOJA
+  OUTROS
+}
+
+model PaymentMethod {
+  id            String      @id @default(cuid())
+  tenantId      String
+  tenant        Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name          String
+  kind          PaymentKind
+  /// Conta financeira padrão para recebimento.
+  financialAccountId String?
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+  /// Percentual de taxa do meio de pagamento (ex.: 3.5 = 3,5%).
+  feePercent    Decimal     @default(0) @db.Decimal(6, 3)
+  requiresCustomer Boolean  @default(false)
+  active        Boolean     @default(true)
+  sortOrder     Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  salePayments SalePayment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+  @@map("payment_methods")
+}
+
+model Sale {
+  id              String     @id @default(cuid())
+  tenantId        String
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId        String
+  branch          Branch     @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  number          Int
+  documentNumber  String
+  status          SaleStatus @default(ABERTA)
+  customerId      String?
+  customer        Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  operatorId      String
+  operator        User       @relation("SaleOperator", fields: [operatorId], references: [id], onDelete: Restrict)
+  cashSessionId   String?
+  cashSession     CashSession? @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  subtotal        Decimal    @db.Decimal(14, 2)
+  discount        Decimal    @default(0) @db.Decimal(14, 2)
+  total           Decimal    @db.Decimal(14, 2)
+  paidTotal       Decimal    @default(0) @db.Decimal(14, 2)
+  changeAmount    Decimal    @default(0) @db.Decimal(14, 2)
+  notes           String?    @db.Text
+  /// Chave de idempotência gerada no cliente para impedir duplicidade em retry.
+  idempotencyKey  String?
+  stockApplied    Boolean    @default(false)
+  confirmedAt     DateTime?
+  canceledAt      DateTime?
+  canceledById    String?
+  canceledBy      User?      @relation("SaleCanceledBy", fields: [canceledById], references: [id], onDelete: SetNull)
+  cancelReason    String?    @db.Text
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  items      SaleItem[]
+  payments   SalePayment[]
+  returns    SaleReturn[]
+  receivables Receivable[]
+  ledgerEntries LedgerEntry[]
+  receiptTokens ReceiptToken[]
+  whatsappLogs WhatsAppLog[]
+
+  @@unique([tenantId, documentNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([tenantId, customerId])
+  @@index([tenantId, status])
+  @@map("sales")
+}
+
+model SaleItem {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  saleId      String
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  description String
+  sku         String
+  quantity    Decimal  @db.Decimal(14, 3)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  unitCost    Decimal  @db.Decimal(14, 2)
+  discount    Decimal  @default(0) @db.Decimal(14, 2)
+  total       Decimal  @db.Decimal(14, 2)
+
+  returnItems SaleReturnItem[]
+
+  @@index([saleId])
+  @@index([tenantId, productId])
+  @@map("sale_items")
+}
+
+enum SalePaymentStatus {
+  CONFIRMADO
+  ESTORNADO
+}
+
+model SalePayment {
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  saleId        String
+  sale          Sale      @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  paymentMethodId String?
+  paymentMethod PaymentMethod? @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  methodKind    PaymentKind
+  methodName    String
+  amount        Decimal   @db.Decimal(14, 2)
+  feeAmount     Decimal   @default(0) @db.Decimal(14, 2)
+  installments  Int       @default(1)
+  status        SalePaymentStatus @default(CONFIRMADO)
+  financialAccountId String?
+  financialAccount FinancialAccount? @relation(fields: [financialAccountId], references: [id], onDelete: SetNull)
+  transactionRef String?
+  notes         String?
+  receivedAt    DateTime  @default(now())
+  reversedAt    DateTime?
+  reversedReason String?
+  createdAt     DateTime  @default(now())
+
+  @@index([saleId])
+  @@index([tenantId, receivedAt])
+  @@map("sale_payments")
+}
+
+model SaleReturn {
+  id          String   @id @default(cuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  saleId      String
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Restrict)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reason      String   @db.Text
+  total       Decimal  @db.Decimal(14, 2)
+  stockApplied Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  items SaleReturnItem[]
+
+  @@index([saleId])
+  @@index([tenantId, createdAt])
+  @@map("sale_returns")
+}
+
+model SaleReturnItem {
+  id          String   @id @default(cuid())
+  saleReturnId String
+  saleReturn  SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Restrict)
+  saleItemId  String
+  saleItem    SaleItem @relation(fields: [saleItemId], references: [id], onDelete: Restrict)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  quantity    Decimal  @db.Decimal(14, 3)
+  unitPrice   Decimal  @db.Decimal(14, 2)
+  total       Decimal  @db.Decimal(14, 2)
+  restock     Boolean  @default(true)
+
+  @@index([saleReturnId])
+  @@map("sale_return_items")
+}
+
+// ---------------------------------------------------------------------------
+// Caixa
+// ---------------------------------------------------------------------------
+
+enum CashSessionStatus {
+  ABERTO
+  FECHADO
+}
+
+enum CashMovementType {
+  SUPRIMENTO
+  SANGRIA
+  VENDA
+  ESTORNO
+}
+
+model CashSession {
+  id            String   @id @default(cuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId      String
+  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  terminalName  String
+  operatorId    String
+  operator      User     @relation("CashOperator", fields: [operatorId], references: [id], onDelete: Restrict)
+  status        CashSessionStatus @default(ABERTO)
+  openingAmount Decimal  @db.Decimal(14, 2)
+  expectedCash  Decimal? @db.Decimal(14, 2)
+  countedCash   Decimal? @db.Decimal(14, 2)
+  difference    Decimal? @db.Decimal(14, 2)
+  openedAt      DateTime @default(now())
+  closedAt      DateTime?
+  closedById    String?
+  closedBy      User?    @relation("CashClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sales     Sale[]
+  movements CashMovement[]
+
+  @@index([tenantId, status])
+  @@index([branchId, status])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId  String
+  branch    Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  sessionId String
+  session   CashSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  type      CashMovementType
+  amount    Decimal  @db.Decimal(14, 2)
+  reason    String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  saleId    String?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("cash_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Financeiro
+// ---------------------------------------------------------------------------
+
+enum FinancialAccountType {
+  CAIXA
+  BANCO
+  CARTAO
+  OUTROS
+}
+
+model FinancialAccount {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String?
+  branch         Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  name           String
+  type           FinancialAccountType @default(CAIXA)
+  bankName       String?
+  agency         String?
+  accountNumber  String?
+  initialBalance Decimal  @default(0) @db.Decimal(14, 2)
+  initialBalanceDate DateTime @default(now())
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ledgerEntries  LedgerEntry[]
+  transfersOut   AccountTransfer[] @relation("TransferFrom")
+  transfersIn    AccountTransfer[] @relation("TransferTo")
+  paymentMethods PaymentMethod[]
+  payablePayments PayablePayment[]
+  receivablePayments ReceivablePayment[]
+  salePayments   SalePayment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, active])
+  @@map("financial_accounts")
+}
+
+enum ChartAccountNature {
+  RECEITA
+  DESPESA
+  CUSTO
+  ATIVO
+  PASSIVO
+  PATRIMONIO
+}
+
+model ChartAccount {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  code      String
+  name      String
+  nature    ChartAccountNature
+  parentId  String?
+  parent    ChartAccount?  @relation("ChartTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children  ChartAccount[] @relation("ChartTree")
+  level     Int      @default(1)
+  isAnalytic Boolean @default(true)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledgerEntries LedgerEntry[]
+  payables      Payable[]
+  receivables   Receivable[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, nature])
+  @@map("chart_accounts")
+}
+
+model CostCenter {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  code      String
+  name      String
+  description String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ledgerEntries LedgerEntry[]
+  payables      Payable[]
+  receivables   Receivable[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+  @@map("cost_centers")
+}
+
+enum LedgerEntryType {
+  ENTRADA
+  SAIDA
+}
+
+enum LedgerSourceType {
+  VENDA
+  RECEBIMENTO
+  PAGAMENTO
+  SUPRIMENTO
+  SANGRIA
+  TRANSFERENCIA
+  AJUSTE
+  DESPESA
+  RECEITA
+  ESTORNO
+}
+
+model LedgerEntry {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String?
+  branch         Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  financialAccountId String
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  chartAccountId String?
+  chartAccount   ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  costCenterId   String?
+  costCenter     CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  date           DateTime
+  competenceDate DateTime
+  type           LedgerEntryType
+  amount         Decimal  @db.Decimal(14, 2)
+  description    String
+  document       String?
+  sourceType     LedgerSourceType
+  sourceId       String?
+  saleId         String?
+  sale           Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  transferId     String?
+  transfer       AccountTransfer? @relation(fields: [transferId], references: [id], onDelete: Restrict)
+  reversalOfId   String?  @unique
+  reversalOf     LedgerEntry? @relation("LedgerReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal       LedgerEntry? @relation("LedgerReversal")
+  reconciledAt   DateTime?
+  createdById    String?
+  createdAt      DateTime @default(now())
+
+  @@index([tenantId, date])
+  @@index([financialAccountId, date])
+  @@index([tenantId, sourceType, sourceId])
+  @@index([tenantId, competenceDate])
+  @@map("ledger_entries")
+}
+
+model AccountTransfer {
+  id              String   @id @default(cuid())
+  tenantId        String
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fromAccountId   String
+  fromAccount     FinancialAccount @relation("TransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccountId     String
+  toAccount       FinancialAccount @relation("TransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+  amount          Decimal  @db.Decimal(14, 2)
+  date            DateTime
+  description     String
+  createdById     String?
+  createdAt       DateTime @default(now())
+
+  entries LedgerEntry[]
+
+  @@index([tenantId, date])
+  @@map("account_transfers")
+}
+
+enum PayableStatus {
+  ABERTO
+  PARCIAL
+  PAGO
+  CANCELADO
+}
+
+model Payable {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  supplierId     String?
+  supplier       Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  description    String
+  document       String?
+  chartAccountId String?
+  chartAccount   ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  costCenterId   String?
+  costCenter     CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  issueDate      DateTime
+  competenceDate DateTime
+  dueDate        DateTime
+  value          Decimal  @db.Decimal(14, 2)
+  status         PayableStatus @default(ABERTO)
+  installmentGroupId String?
+  installmentNumber Int?
+  installmentTotal  Int?
+  notes          String?  @db.Text
+  createdById    String?
+  canceledAt     DateTime?
+  canceledReason String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments PayablePayment[]
+
+  @@index([tenantId, dueDate])
+  @@index([tenantId, status])
+  @@index([installmentGroupId])
+  @@map("payables")
+}
+
+model PayablePayment {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payableId      String
+  payable        Payable  @relation(fields: [payableId], references: [id], onDelete: Restrict)
+  financialAccountId String
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  date           DateTime
+  amount         Decimal  @db.Decimal(14, 2)
+  interest       Decimal  @default(0) @db.Decimal(14, 2)
+  penalty        Decimal  @default(0) @db.Decimal(14, 2)
+  discount       Decimal  @default(0) @db.Decimal(14, 2)
+  method         String?
+  document       String?
+  notes          String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  ledgerEntryId  String?
+  reversedAt     DateTime?
+  reversedById   String?
+  reversalReason String?
+  createdAt      DateTime @default(now())
+
+  @@index([payableId])
+  @@index([tenantId, date])
+  @@map("payable_payments")
+}
+
+enum ReceivableStatus {
+  ABERTO
+  PARCIAL
+  RECEBIDO
+  CANCELADO
+}
+
+model Receivable {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  branchId       String
+  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId     String?
+  customer       Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  saleId         String?
+  sale           Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  description    String
+  document       String?
+  chartAccountId String?
+  chartAccount   ChartAccount? @relation(fields: [chartAccountId], references: [id], onDelete: SetNull)
+  costCenterId   String?
+  costCenter     CostCenter? @relation(fields: [costCenterId], references: [id], onDelete: SetNull)
+  issueDate      DateTime
+  competenceDate DateTime
+  dueDate        DateTime
+  value          Decimal  @db.Decimal(14, 2)
+  status         ReceivableStatus @default(ABERTO)
+  installmentGroupId String?
+  installmentNumber Int?
+  installmentTotal  Int?
+  notes          String?  @db.Text
+  createdById    String?
+  canceledAt     DateTime?
+  canceledReason String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payments ReceivablePayment[]
+
+  @@index([tenantId, dueDate])
+  @@index([tenantId, status])
+  @@index([customerId])
+  @@index([saleId])
+  @@index([installmentGroupId])
+  @@map("receivables")
+}
+
+model ReceivablePayment {
+  id             String   @id @default(cuid())
+  tenantId       String
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  receivableId   String
+  receivable     Receivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  financialAccountId String
+  financialAccount FinancialAccount @relation(fields: [financialAccountId], references: [id], onDelete: Restrict)
+  date           DateTime
+  amount         Decimal  @db.Decimal(14, 2)
+  interest       Decimal  @default(0) @db.Decimal(14, 2)
+  penalty        Decimal  @default(0) @db.Decimal(14, 2)
+  discount       Decimal  @default(0) @db.Decimal(14, 2)
+  method         String?
+  document       String?
+  notes          String?
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  ledgerEntryId  String?
+  reversedAt     DateTime?
+  reversedById   String?
+  reversalReason String?
+  createdAt      DateTime @default(now())
+
+  @@index([receivableId])
+  @@index([tenantId, date])
+  @@map("receivable_payments")
+}
+
+// ---------------------------------------------------------------------------
+// Comprovantes, integrações e auditoria
+// ---------------------------------------------------------------------------
+
+model ReceiptToken {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  saleId    String
+  sale      Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([saleId])
+  @@map("receipt_tokens")
+}
+
+model WhatsAppLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  saleId    String?
+  sale      Sale?    @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  phone     String
+  status    String
+  provider  String
+  messageId String?
+  error     String?  @db.Text
+  createdById String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@map("whatsapp_logs")
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  EXPORT
+  PRINT
+  CANCEL
+  REVERT
+  CLOSE
+  OPEN
+  CONFIRM
+}
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  tenantId    String?
+  tenant      Tenant?     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action      AuditAction
+  module      String
+  entity      String?
+  entityId    String?
+  description String?
+  oldValues   Json?
+  newValues   Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@index([entity, entityId])
+  @@map("audit_logs")
+}
