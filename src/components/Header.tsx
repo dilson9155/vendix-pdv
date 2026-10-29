@@ -71,9 +71,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-xl font-black tracking-tight text-white font-['Montserrat']">
                 VENDIX
               </span>
-              <span className="bg-purple-600/30 text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-500/30">
-                SaaS
-              </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block italic">
               "Vendeu, organizou, cresceu."

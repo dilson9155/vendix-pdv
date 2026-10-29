@@ -174,7 +174,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
             <div className="pt-3 text-center space-y-1 text-[9px] text-slate-500">
               <p className="font-semibold text-slate-800">{currentTenant.settings.receiptFooter || 'Obrigado pela preferência!'}</p>
               <p className="italic text-[8px]">*** COMPROVANTE NÃO FISCAL DE VENDA ***</p>
-              <p className="text-[8px] text-slate-400">Vendix Retail SaaS - "Vendeu, organizou, cresceu."</p>
+              <p className="text-[8px] text-slate-400">Vendix Retail - "Vendeu, organizou, cresceu."</p>
             </div>
           </div>
         </div>
