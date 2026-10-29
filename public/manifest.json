@@ -1,0 +1,21 @@
+{
+  "name": "Vendix - Sistema Comercial & PDV",
+  "short_name": "Vendix",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#6D28D9",
+  "description": "Vendeu, organizou, cresceu. Sistema SaaS de gestão comercial, PDV, estoque e financeiro.",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%236D28D9'/><path d='M140 160 L256 380 L372 160' stroke='white' stroke-width='48' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='380' cy='160' r='24' fill='%23FF6B6B'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%236D28D9'/><path d='M140 160 L256 380 L372 160' stroke='white' stroke-width='48' stroke-linecap='round' stroke-linejoin='round' fill='none'/><circle cx='380' cy='160' r='24' fill='%23FF6B6B'/></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

@@ -1,0 +1,680 @@
+PROMPT MESTRE — VENDIX SaaS
+DESENVOLVIMENTO PELO GOOGLE AI STUDIO, CÓDIGO NO GITHUB, BANCO SUPABASE E HOSPEDAGEM VERCEL
+
+Atue como arquiteto de software, desenvolvedor full-stack sênior, especialista em SaaS multiempresa, sistemas de gestão comercial, PDV, estoque, gestão financeira, PostgreSQL, segurança e experiência do usuário.
+
+Desenvolva o VENDIX, um sistema SaaS de gestão comercial para lojas de roupas, calçados, maquiagens, cosméticos, bijuterias, bolsas, acessórios, presentes, utensílios domésticos e lojas de variedades.
+
+Slogan: "Vendeu, organizou, cresceu."
+
+OBJETIVO
+Criar um sistema comercial profissional, moderno, responsivo, seguro, funcional e preparado para operação real. O sistema será desenvolvido utilizando o Google AI Studio, armazenado no GitHub, conectado ao Supabase e implantado na Vercel.
+
+Não crie apenas um protótipo visual. Implemente banco de dados, autenticação, regras de negócio, permissões, formulários, filtros, relatórios, validações e tratamento de erros.
+
+1. TECNOLOGIAS E ARQUITETURA
+
+Utilize preferencialmente:
+- Google AI Studio para desenvolver e evoluir a aplicação.
+- Next.js com App Router e TypeScript, se compatível com o ambiente de desenvolvimento escolhido.
+- React para componentes de interface.
+- Tailwind CSS e shadcn/ui para uma interface moderna.
+- Supabase PostgreSQL como banco de dados.
+- Supabase Auth para autenticação, se compatível com a arquitetura escolhida.
+- Supabase Storage para imagens e arquivos, quando necessário.
+- Supabase Row Level Security (RLS) para proteção dos dados.
+- GitHub para repositório, histórico e versionamento do código.
+- Vercel para hospedagem e implantação contínua.
+- Zod para validação de dados.
+- Biblioteca decimal.js ou equivalente para cálculos financeiros precisos.
+- Testes unitários, integração e testes de interface.
+
+Antes de implementar, verifique a estrutura e os recursos disponíveis no ambiente do Google AI Studio. Não assuma que integrações, arquivos ou serviços já estejam configurados.
+
+Se o projeto já existir, inspecione os arquivos e preserve o que estiver funcionando. Não recrie o projeto inteiro sem necessidade.
+
+Não misture arquiteturas incompatíveis. Organize o código em componentes, páginas, serviços de negócio, validações, tipos, funções de acesso ao banco e políticas de segurança.
+
+2. IDENTIDADE VISUAL
+
+Nome: Vendix.
+Slogan: Vendeu, organizou, cresceu.
+
+Paleta:
+- Roxo principal: #6D28D9.
+- Coral: #FF6B6B.
+- Azul-escuro: #0F172A.
+- Cinza-claro: #E5E7EB.
+- Branco: #FFFFFF.
+
+Utilize Montserrat nos títulos e Open Sans nos textos, quando possível.
+
+Crie identidade visual moderna, vibrante, profissional e comercial. A interface deve apresentar navegação intuitiva, ícones consistentes, tabelas organizadas, cartões de indicadores, formulários claros e feedback visual.
+
+O sistema precisa funcionar em computador, notebook, tablet e celular. Adapte os componentes para cada tela; não simplesmente comprima a versão desktop.
+
+Crie ícones e manifest para instalação como PWA, quando compatível. Não armazene dados financeiros sensíveis indiscriminadamente no cache do navegador.
+
+3. ESTRUTURA SaaS MULTIEMPRESA
+
+O Vendix será uma plataforma na qual diversas empresas poderão contratar o sistema e utilizar os próprios dados de forma independente.
+
+Criar:
+- Superadministrador da plataforma.
+- Cadastro de empresas e responsáveis.
+- Cadastro e gerenciamento de planos.
+- Assinaturas e vencimentos.
+- Período de avaliação configurável.
+- Limites de usuários, filiais e funcionalidades por plano.
+- Gestão de pagamentos e status da assinatura.
+- Suspensão e reativação conforme regras configuráveis.
+- Cadastro de matriz e filiais.
+- Configurações independentes por empresa.
+- Dashboard administrativo da plataforma.
+- Indicadores de empresas ativas, suspensas e em avaliação.
+- Histórico de assinaturas e eventos.
+- Auditoria de operações críticas.
+
+Cada empresa terá um identificador tenant_id. Quando houver filiais, utilizar branch_id.
+
+Implemente isolamento de dados em todas as tabelas e operações relevantes. Configure políticas RLS no Supabase, considerando a empresa e a unidade autorizadas do usuário autenticado.
+
+Não confie em tenant_id recebido do navegador. Valide o contexto da sessão no servidor e aplique autorização em consultas, inserções, atualizações, exclusões, relatórios e exportações.
+
+Nunca exponha a chave service_role do Supabase no navegador, no código público ou no repositório. Chaves privilegiadas devem ser utilizadas exclusivamente em ambientes confiáveis no servidor, quando realmente necessárias.
+
+Um usuário de uma empresa jamais poderá visualizar ou modificar dados de outra empresa, mesmo que tente manipular URLs, identificadores ou requisições.
+
+4. MENU PRINCIPAL
+
+Criar menu com:
+- Dashboard.
+- PDV / Caixa.
+- Vendas.
+- Clientes.
+- Produtos.
+- Categorias.
+- Marcas.
+- Fornecedores.
+- Estoque.
+- Financeiro.
+- Contas a pagar.
+- Contas a receber.
+- Livro caixa.
+- Contas financeiras.
+- Plano de contas.
+- Centros de custos.
+- Fluxo de caixa.
+- Relatórios financeiros.
+- DRE gerencial.
+- Relatórios comerciais.
+- Usuários e permissões.
+- Configurações.
+- Assinatura e plano.
+- Administração SaaS, exclusiva do superadministrador.
+
+Os menus devem respeitar as permissões do usuário. A segurança não pode depender apenas de ocultar opções na interface.
+
+5. DASHBOARD
+
+Apresentar dados reais:
+- Vendas de hoje e do mês.
+- Quantidade de vendas.
+- Ticket médio.
+- Produtos mais vendidos.
+- Produtos com estoque baixo.
+- Contas a pagar vencidas e próximas do vencimento.
+- Contas a receber vencidas e próximas do vencimento.
+- Saldo das contas financeiras.
+- Fluxo de caixa previsto e realizado.
+- Indicadores financeiros.
+- Gráficos de evolução.
+- Comparativos entre períodos.
+- Filtros por data e unidade.
+
+Cada indicador deve possuir fórmula documentada. Diferencie faturamento, recebimento, saldo de caixa, lucro bruto e resultado gerencial.
+
+Não utilize dados fictícios como se fossem informações reais da empresa. Se o banco estiver vazio, apresente uma mensagem de orientação.
+
+6. PDV — FRENTE DE CAIXA
+
+Criar uma tela de vendas rápida, intuitiva e otimizada para operação comercial.
+
+Funcionalidades:
+- Abertura de caixa com saldo inicial.
+- Identificação do operador.
+- Identificação do terminal e unidade.
+- Suprimentos e sangrias com justificativa.
+- Pesquisa de produtos por nome, SKU e código de barras.
+- Leitura por scanner USB ou Bluetooth em modo teclado.
+- Adição automática do produto lido ao carrinho.
+- Controle de quantidades.
+- Descontos por item e na venda, conforme permissões.
+- Identificação do cliente.
+- Venda sem cliente identificado, quando permitido.
+- Cálculo de subtotal, descontos, total e troco.
+- Pagamentos em dinheiro, Pix, débito, crédito e outras formas configuráveis.
+- Pagamentos divididos entre diferentes formas.
+- Parcelamento e geração dos recebíveis correspondentes.
+- Venda a prazo pela modalidade crediário, quando habilitada.
+- Finalização segura.
+- Numeração única das vendas.
+- Atualização do estoque sem duplicidade.
+- Cancelamento com motivo e autorização.
+- Devoluções e estornos rastreáveis.
+- Histórico e reimpressão de vendas.
+- Fechamento de caixa.
+- Conferência de valores esperados e contados.
+- Relatório de diferenças por operador.
+- Atalhos de teclado.
+
+Implemente as operações críticas no servidor ou em funções confiáveis do backend. Não aceite totais, descontos, saldos ou preços enviados pelo navegador sem recalcular e validar os valores.
+
+Utilize transações de banco de dados para garantir consistência entre venda, pagamentos, estoque e recebíveis. Previna duplicidade de operações por repetição de requisições.
+
+7. LEITOR DE CÓDIGO DE BARRAS
+
+Suportar leitores USB e Bluetooth que funcionem como teclado.
+
+Criar:
+- Campo de leitura com foco adequado.
+- Busca rápida por EAN-13, EAN-8, UPC, SKU e códigos internos.
+- Cadastro de códigos alternativos.
+- Validação de duplicidade por empresa.
+- Mensagem para produtos não encontrados.
+- Cadastro de código interno quando necessário.
+- Identificação de variantes de produtos.
+- Código de barras específico para cada variante, quando aplicável.
+- Testes com dispositivos reais.
+
+Não exigir integração especial para leitores que enviam caracteres como um teclado. Para equipamentos com protocolo próprio, documentar a necessidade de integração adicional.
+
+8. IMPRESSORAS TÉRMICAS E COMPROVANTES
+
+Criar comprovantes comerciais com:
+- Logo e dados da empresa.
+- Número da venda.
+- Data e operador.
+- Itens, quantidades e valores.
+- Descontos e total.
+- Formas de pagamento.
+- Valor recebido e troco.
+- Informações adicionais configuráveis.
+
+Suportar layouts de 58 mm e 80 mm.
+
+Permitir:
+- Pré-visualização.
+- Impressão.
+- Reimpressão autorizada.
+- Geração de PDF.
+- Compartilhamento do comprovante.
+
+Documente a compatibilidade com impressoras térmicas. A impressão direta e silenciosa poderá exigir agente local, bridge de impressão, driver ou integração ESC/POS. Não prometa impressão silenciosa universal por navegador.
+
+O comprovante comercial não equivale a documento fiscal.
+
+9. WHATSAPP
+
+Implementar compartilhamento de comprovantes com:
+- Telefone do cliente.
+- Mensagem personalizada.
+- Link seguro ou PDF.
+- Histórico de solicitações e tentativas.
+- Status real de envio, quando disponível.
+
+Quando configurada, utilizar a API oficial WhatsApp Business Platform/Cloud API ou provedor autorizado.
+
+Quando a API não estiver configurada, oferecer compartilhamento manual por wa.me ou recurso nativo do dispositivo. Não afirmar que uma mensagem foi enviada se somente um link foi aberto.
+
+Credenciais devem permanecer no servidor. Os links dos comprovantes devem utilizar tokens seguros, expiração e possibilidade de revogação. Não expor informações pessoais ou financeiras por URLs públicas previsíveis.
+
+10. CLIENTES
+
+Cadastro:
+- Nome ou razão social.
+- CPF/CNPJ, quando aplicável.
+- Telefone e WhatsApp.
+- E-mail.
+- Endereço.
+- Data de nascimento opcional.
+- Observações.
+- Status.
+- Histórico de compras.
+- Total comprado e última compra.
+- Contas a receber vinculadas, conforme permissão.
+
+Criar pesquisa, filtros, paginação, validação, prevenção de duplicidades, importação e exportação autorizadas.
+
+Respeitar a LGPD e restringir o acesso aos dados pessoais.
+
+11. PRODUTOS, CATEGORIAS, MARCAS E FORNECEDORES
+
+Produtos devem possuir:
+- Nome e descrição.
+- SKU e código de barras.
+- Categoria e marca.
+- Fornecedor.
+- Preço de custo.
+- Preço de venda.
+- Margem calculada.
+- Preço promocional e período promocional.
+- Unidade de medida.
+- Estoque atual, mínimo e máximo.
+- Imagens.
+- Status ativo ou inativo.
+- Histórico de alterações de preço e custo.
+- Dados fiscais quando aplicáveis.
+
+Para moda:
+- Tamanho.
+- Cor.
+- Modelo.
+- Grade de tamanhos.
+- SKU e código de barras por variante.
+- Estoque independente por variante.
+
+Para cosméticos:
+- Marca.
+- Volume e apresentação.
+- Lote e validade quando aplicáveis.
+- Alertas de vencimento.
+
+Criar cadastros de fornecedores, categorias e marcas, com pesquisa e filtros.
+
+12. ESTOQUE
+
+Implementar:
+- Entradas e saídas.
+- Ajustes de inventário.
+- Transferências entre filiais.
+- Movimentações originadas de vendas.
+- Devoluções de clientes e fornecedores.
+- Histórico de movimentações.
+- Estoque mínimo.
+- Alertas.
+- Produtos sem giro.
+- Relatório de inventário.
+- Valorização do estoque conforme método definido.
+- Controle por produto, variante e unidade.
+
+Cada movimentação deve registrar usuário, data, origem, documento e motivo.
+
+Evitar estoque negativo conforme a política da empresa. Operações simultâneas devem utilizar transações e controles de concorrência para evitar saldos incorretos.
+
+13. FINANCEIRO INTEGRADO
+
+Criar um módulo financeiro completo e conectado ao PDV.
+
+13.1 CONTAS A PAGAR
+- Cadastro de despesas e obrigações.
+- Fornecedor.
+- Descrição.
+- Documento.
+- Valor.
+- Data de emissão.
+- Data de competência.
+- Vencimento.
+- Parcelas.
+- Conta financeira.
+- Conta contábil gerencial.
+- Centro de custo.
+- Unidade.
+- Anexos, quando aplicável.
+- Pagamento total ou parcial.
+- Juros, multa, desconto e acréscimos.
+- Estorno de baixa com motivo.
+- Situações: em aberto, parcial, paga, vencida e cancelada.
+- Filtros por período, vencimento, pagamento, fornecedor, conta, centro de custo, unidade e status.
+- Relatórios de vencimentos e pagamentos.
+
+13.2 CONTAS A RECEBER
+- Recebíveis gerados pelas vendas.
+- Cadastro manual autorizado.
+- Cliente e documento.
+- Parcelas e vencimentos.
+- Recebimento total ou parcial.
+- Juros, multa, desconto e abatimentos.
+- Conta financeira de destino.
+- Estorno com motivo.
+- Controle de inadimplência.
+- Situações: em aberto, parcial, recebida, vencida e cancelada.
+- Filtros por cliente, período, vencimento, recebimento, status, conta, centro de custo e unidade.
+- Relatórios de recebimentos previstos e realizados.
+
+Não gerar recebíveis duplicados a partir de uma mesma venda. Não tratar automaticamente pagamentos de cartão parcelado como crediário do cliente.
+
+13.3 LIVRO CAIXA
+- Entradas e saídas cronológicas.
+- Saldo inicial e final.
+- Data e descrição.
+- Conta financeira.
+- Categoria.
+- Centro de custo.
+- Usuário.
+- Origem da movimentação.
+- Suprimentos e sangrias.
+- Transferências identificadas.
+- Filtros por data, tipo, conta, categoria, unidade e usuário.
+- Impressão e exportação.
+
+Transferências internas entre contas não devem ser classificadas como receita ou despesa.
+
+13.4 CONTAS FINANCEIRAS
+- Caixa físico.
+- Contas bancárias.
+- Outras contas de controle.
+- Saldo inicial.
+- Entradas e saídas.
+- Transferências.
+- Conciliação manual.
+- Histórico de movimentações.
+- Saldo atual calculado a partir dos registros válidos.
+
+13.5 PLANO DE CONTAS GERENCIAL
+- Código.
+- Descrição.
+- Conta superior.
+- Natureza.
+- Classificação.
+- Contas sintéticas e analíticas.
+- Regras de lançamento.
+- Ativação e inativação.
+- Histórico de alterações.
+
+Impedir lançamentos em contas sintéticas quando não permitido. Documentar que o plano gerencial não substitui escrituração contábil oficial.
+
+13.6 CENTROS DE CUSTOS
+- Cadastro de centros de custos.
+- Código, nome, descrição e status.
+- Associação de despesas, receitas e movimentações.
+- Rateio opcional entre centros.
+- Validação dos valores rateados.
+- Filtros por período, unidade e categoria.
+- Relatórios comparativos.
+
+13.7 FLUXO DE CAIXA
+- Saldo inicial.
+- Entradas previstas e realizadas.
+- Saídas previstas e realizadas.
+- Saldo final.
+- Projeções diárias, semanais e mensais.
+- Filtros por período, conta, unidade, categoria e centro de custo.
+- Gráficos e tabelas.
+
+Separar valores previstos de valores efetivamente recebidos e pagos.
+
+13.8 DRE GERENCIAL
+Criar Demonstrativo de Resultado do Exercício gerencial com:
+- Receita bruta.
+- Devoluções, descontos e deduções.
+- Receita líquida.
+- Custo das mercadorias vendidas.
+- Lucro bruto.
+- Despesas operacionais.
+- Resultado operacional.
+- Outras receitas e despesas.
+- Resultado líquido gerencial conforme as classificações configuradas.
+
+Disponibilizar filtros por competência, período, filial, centro de custo e categoria.
+
+Exibir valores, percentuais sobre a receita e comparativos entre períodos. Permitir detalhamento das contas que compõem cada linha.
+
+Documentar todas as fórmulas. Não confundir vendas com recebimentos ou pagamentos com despesas por competência.
+
+Calcular o custo das mercadorias vendidas com base em custos históricos consistentes. Tratar cancelamentos, devoluções e descontos sem duplicidade.
+
+A DRE é gerencial e não deve ser apresentada como demonstrativo contábil oficial sem validação profissional.
+
+13.9 RELATÓRIOS FINANCEIROS
+Implementar:
+- Contas a pagar.
+- Contas a receber.
+- Pagamentos realizados.
+- Recebimentos realizados.
+- Inadimplência.
+- Livro caixa.
+- Movimentações por conta.
+- Fluxo de caixa previsto e realizado.
+- Despesas por categoria.
+- Receitas por categoria.
+- Despesas por centro de custo.
+- Resultado por unidade.
+- Vendas versus recebimentos.
+- Conciliação financeira.
+- DRE gerencial.
+
+Todos os relatórios devem possuir filtros funcionais, totais, paginação, impressão e exportação CSV. Disponibilizar XLSX e PDF quando houver bibliotecas adequadas implementadas e testadas.
+
+14. REGRAS FINANCEIRAS OBRIGATÓRIAS
+
+- Armazenar valores monetários como DECIMAL/NUMERIC no PostgreSQL.
+- Nunca utilizar cálculos monetários baseados diretamente em ponto flutuante binário.
+- Utilizar transações para operações relacionadas.
+- Garantir idempotência.
+- Registrar baixas e estornos com rastreabilidade.
+- Não apagar silenciosamente operações financeiras confirmadas.
+- Registrar reversões vinculadas ao lançamento original.
+- Controlar arredondamentos.
+- Validar datas, valores e saldos.
+- Prevenir duplicidade de pagamentos e recebimentos.
+- Manter consistência entre vendas, estoque, caixa e financeiro.
+- Restringir alterações retroativas e registrar exceções autorizadas.
+
+15. USUÁRIOS E PERMISSÕES
+
+Criar:
+- Cadastro e convite de usuários.
+- Ativação e desativação.
+- Recuperação segura de senha.
+- Perfis e permissões por módulo e operação.
+- Acesso limitado por empresa e unidade.
+- Permissões para descontos, cancelamentos, estornos e configurações.
+- Logs de auditoria.
+- Histórico de atividades.
+- Gestão exclusiva do superadministrador.
+
+Aplique as permissões no servidor e nas políticas do banco. Não confie somente em menus ocultos.
+
+16. CONFIGURAÇÕES
+
+Criar configurações de:
+- Empresa.
+- Filiais.
+- Logo e identidade visual.
+- Dados de contato.
+- Preferências regionais.
+- Moeda e fuso horário.
+- Formas de pagamento.
+- Regras de estoque.
+- Configurações do PDV.
+- Impressão e comprovantes.
+- Integração WhatsApp.
+- Categorias financeiras.
+- Plano de contas.
+- Centros de custos.
+- Permissões.
+- Preferências de relatórios.
+- Segurança.
+- Assinaturas e limites do plano.
+
+As configurações devem ser persistidas no banco, validadas e isoladas por empresa.
+
+17. SUPABASE — CONFIGURAÇÃO E SEGURANÇA
+
+Utilize Supabase PostgreSQL como banco principal.
+
+Organize o banco com tabelas, relacionamentos, chaves estrangeiras, índices, constraints e migrações versionadas.
+
+Crie políticas RLS para tabelas com dados empresariais. As políticas devem impedir leitura e escrita entre tenants e respeitar as permissões dos usuários.
+
+Não considere a RLS substituta de todas as validações do servidor. Aplique as duas camadas.
+
+Utilize migrations SQL versionadas no repositório. Não dependa exclusivamente de alterações manuais feitas no painel do Supabase.
+
+Configure:
+- SUPABASE_URL.
+- SUPABASE_ANON_KEY ou chave publicável apropriada.
+- SUPABASE_SERVICE_ROLE_KEY ou chave secreta equivalente somente no servidor, se necessária.
+- Variáveis de ambiente específicas do projeto.
+
+Não inclua valores reais de segredos no código ou em arquivos versionados. Crie .env.example com nomes e instruções, sem credenciais verdadeiras.
+
+Configure autenticação e sessão conforme a arquitetura selecionada. Não armazene senhas em tabelas próprias sem necessidade. Prefira o Supabase Auth para credenciais de acesso.
+
+18. GITHUB E CONTROLE DE VERSÃO
+
+Organize o projeto para armazenamento no GitHub.
+
+- Criar estrutura de diretórios clara.
+- Utilizar commits pequenos e descritivos.
+- Não versionar .env, credenciais, tokens, arquivos privados ou dados de produção.
+- Incluir .gitignore.
+- Criar README.md.
+- Versionar migrations e políticas RLS.
+- Documentar as variáveis de ambiente.
+- Preservar o histórico de alterações.
+- Verificar o conteúdo antes de publicar no repositório.
+- Não afirmar que o código foi enviado ao GitHub se a integração não estiver conectada e o envio não tiver sido confirmado.
+
+Se houver conexão disponível, orientar a integração do Google AI Studio com o GitHub. Caso contrário, fornecer os arquivos e instruções necessárias para versionamento manual.
+
+19. VERCEL E IMPLANTAÇÃO
+
+Preparar o projeto para implantação na Vercel.
+
+- Configurar comandos de build.
+- Configurar variáveis de ambiente por ambiente.
+- Conectar o repositório GitHub.
+- Configurar domínio e HTTPS.
+- Configurar produção, preview e desenvolvimento.
+- Validar conexão com o Supabase.
+- Aplicar migrations com procedimento seguro.
+- Evitar operações destrutivas durante deploy.
+- Verificar logs e erros.
+- Documentar atualização e rollback.
+- Considerar limites de execução serverless e conexões do banco.
+- Não expor credenciais em logs ou no bundle do navegador.
+
+Não afirmar que o sistema está publicado se a implantação não foi efetivamente realizada e verificada.
+
+20. SEGURANÇA E LGPD
+
+Implementar:
+- Validação de dados.
+- Proteção contra SQL injection, XSS e CSRF quando aplicável.
+- Controle de sessão e autorização.
+- Limitação de requisições sensíveis.
+- Proteção de credenciais.
+- Isolamento multiempresa.
+- Auditoria de operações críticas.
+- Controle de acesso aos arquivos.
+- Política de retenção e tratamento de dados pessoais.
+- Exportação e tratamento de solicitações dos titulares conforme requisitos aplicáveis.
+- Backup e plano de recuperação documentados.
+
+Não armazenar dados completos de cartões de pagamento. Não confiar em valores calculados pelo navegador. Não afirmar segurança absoluta sem auditoria e testes.
+
+21. TESTES OBRIGATÓRIOS
+
+Criar testes para:
+- Autenticação e recuperação de senha.
+- Isolamento entre empresas.
+- Políticas RLS.
+- Permissões por perfil.
+- Cadastro e busca de produtos.
+- Código de barras.
+- Venda com diferentes formas de pagamento.
+- Abertura e fechamento de caixa.
+- Estoque e reversões.
+- Contas a pagar e receber.
+- Baixas parciais e totais.
+- Estornos.
+- Transferências financeiras.
+- Livro caixa.
+- Fluxo de caixa.
+- Cálculos da DRE.
+- Filtros e exportações.
+- Comprovantes.
+- Compartilhamento WhatsApp.
+- Limites de assinatura.
+- Responsividade.
+- Repetição de requisições e concorrência.
+
+Nunca afirmar que um teste passou sem executá-lo. Se o ambiente de testes ou as credenciais do banco não estiverem disponíveis, registrar claramente a limitação.
+
+22. ORDEM DE DESENVOLVIMENTO
+
+ETAPA 1 — Planejamento
+Definir arquitetura, estrutura de diretórios, entidades, relacionamentos, estratégia de autenticação e isolamento multiempresa.
+
+ETAPA 2 — Infraestrutura
+Configurar aplicação, Supabase, migrations, autenticação, políticas RLS, GitHub e variáveis de ambiente.
+
+ETAPA 3 — Interface principal
+Criar identidade visual, layout, navegação, dashboard e componentes reutilizáveis.
+
+ETAPA 4 — Cadastros e estoque
+Implementar clientes, fornecedores, produtos, variantes, categorias, marcas e estoque.
+
+ETAPA 5 — PDV
+Implementar caixa, vendas, pagamentos, leitor de código de barras, comprovantes e impressão.
+
+ETAPA 6 — Financeiro
+Implementar contas a pagar, contas a receber, livro caixa, contas financeiras, plano de contas, centros de custos, fluxo de caixa e DRE.
+
+ETAPA 7 — Relatórios e administração
+Concluir relatórios, filtros, exportações, usuários, permissões, configurações, assinaturas e administração SaaS.
+
+ETAPA 8 — Integrações
+Configurar WhatsApp, armazenamento de arquivos e integrações adicionais quando houver credenciais e requisitos disponíveis.
+
+ETAPA 9 — Validação
+Executar testes, corrigir erros, validar RLS, responsividade, cálculos financeiros e fluxos de ponta a ponta.
+
+ETAPA 10 — Publicação
+Documentar GitHub, Supabase, Vercel, domínio, variáveis de ambiente, migrations e procedimentos de manutenção.
+
+23. REGRAS DE EXECUÇÃO
+
+Após cada etapa:
+- Informar os arquivos criados ou alterados.
+- Explicar as funcionalidades realmente implementadas.
+- Executar as verificações disponíveis.
+- Corrigir os erros encontrados.
+- Listar as pendências.
+- Não substituir módulos funcionais sem justificativa.
+- Não criar funcionalidades duplicadas.
+- Não marcar como concluída uma integração que depende de configuração ainda inexistente.
+
+Se o projeto estiver incompleto, continue do estado real dos arquivos. Não reinicie desnecessariamente o trabalho.
+
+24. CRITÉRIOS DE ACEITAÇÃO
+
+O sistema deverá:
+- Permitir autenticação e isolamento seguro por empresa.
+- Possuir PDV funcional.
+- Integrar vendas, pagamentos, estoque e financeiro.
+- Suportar leitor de código de barras.
+- Gerar comprovantes imprimíveis.
+- Permitir compartilhamento de comprovantes pelo WhatsApp conforme a integração configurada.
+- Possuir contas a pagar e receber com baixas parciais, totais e estornos.
+- Apresentar livro caixa, fluxo de caixa e DRE gerencial consistentes.
+- Oferecer filtros e relatórios funcionais.
+- Controlar usuários e permissões.
+- Possuir painel administrativo SaaS.
+- Ser responsivo e instalável como PWA, quando compatível.
+- Possuir documentação de instalação e implantação.
+- Passar pelos testes executados sem falhas críticas conhecidas.
+
+A emissão fiscal oficial não deve ser simulada. NFC-e e outros documentos fiscais exigem integração específica e validação dos requisitos aplicáveis.
+
+INSTRUÇÃO FINAL
+
+Comece analisando os recursos disponíveis no Google AI Studio e estabelecendo a arquitetura adequada para Supabase, GitHub e Vercel.
+
+Depois implemente o Vendix progressivamente, iniciando pela infraestrutura, autenticação, banco de dados, isolamento multiempresa e interface principal.
+
+Priorize um sistema real e funcional. Trabalhe com persistência no banco, segurança no servidor, políticas RLS, testes e documentação.
+
+Ao concluir cada etapa, informe exatamente o que foi implementado, o que foi testado e o que ainda depende de configuração ou validação.

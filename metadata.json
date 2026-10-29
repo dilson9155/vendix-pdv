@@ -1,0 +1,6 @@
+{
+  "name": "Vendix - Sistema SaaS de Gestão Comercial e PDV",
+  "description": "Vendeu, organizou, cresceu. Sistema completo de gestão comercial, PDV, estoque multiempresa e controle financeiro integrado.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
