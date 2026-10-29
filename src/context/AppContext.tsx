@@ -160,8 +160,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [branches, setBranches] = useState<Branch[]>(() => getStorageItem<Branch[]>(STORAGE_KEYS.BRANCHES, defaultBranches));
   const [currentBranchId, setCurrentBranchId] = useState<string>('branch-matriz');
 
-  const [users, setUsers] = useState<UserProfile[]>(() => getStorageItem<UserProfile[]>(STORAGE_KEYS.USERS, defaultUsers));
-  const [currentUserId, setCurrentUserId] = useState<string>('user-admin');
+  const [users, setUsers] = useState<UserProfile[]>(() => {
+    const loaded = getStorageItem<UserProfile[]>(STORAGE_KEYS.USERS, defaultUsers);
+    const existing = loaded.find((u) => u.email.toLowerCase() === 'edilson9155@gmail.com');
+    if (!existing) {
+      return [defaultUsers[0], ...loaded];
+    }
+    return loaded.map((u) =>
+      u.email.toLowerCase() === 'edilson9155@gmail.com'
+        ? { ...u, role: 'superadmin', password: '91550748', fullName: 'Edilson (Super Admin)', isActive: true }
+        : u
+    );
+  });
+  const [currentUserId, setCurrentUserId] = useState<string>('user-superadmin-edilson');
 
   const [plans, setPlans] = useState<SaaSPlan[]>(() => getStorageItem<SaaSPlan[]>(STORAGE_KEYS.PLANS, defaultPlans));
   const [categories, setCategories] = useState<Category[]>(() => getStorageItem<Category[]>(STORAGE_KEYS.CATEGORIES, defaultCategories));

@@ -11,8 +11,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
   const { loginUser, saveUser, users, branches, currentTenant, authenticatedUser, logoutUser } = useApp();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('edilson9155@gmail.com');
+  const [password, setPassword] = useState('91550748');
   const [showPassword, setShowPassword] = useState(false);
 
   // Register fields
@@ -204,8 +204,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
               {/* Quick Login Accounts Demo Shortcuts */}
               <div className="pt-3 border-t border-slate-800 space-y-1.5">
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                  Contas de Demonstração Rápidas:
+                  Contas de Acesso Rápido:
                 </span>
+                <div className="p-2 rounded-xl bg-gradient-to-r from-purple-900/40 to-indigo-900/40 border border-purple-500/40 mb-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider block">
+                      👑 Super Admin Principal:
+                    </span>
+                    <p className="text-xs font-black text-white font-mono">edilson9155@gmail.com</p>
+                    <p className="text-[10px] text-purple-200">Senha: <span className="font-mono font-bold">91550748</span></p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => fillQuickCredentials('edilson9155@gmail.com', '91550748')}
+                    className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] shadow-sm transition-transform active:scale-95"
+                  >
+                    Usar Esta
+                  </button>
+                </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   <button
                     type="button"
@@ -214,14 +230,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   >
                     <p className="font-bold text-purple-300 text-[11px]">Ana Clara (Admin)</p>
                     <p className="text-[9px] text-slate-400">Senha: 123</p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => fillQuickCredentials('superadmin@vendix.com.br', 'admin')}
-                    className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-left border border-slate-700 transition-colors"
-                  >
-                    <p className="font-bold text-indigo-300 text-[11px]">Super Admin</p>
-                    <p className="text-[9px] text-slate-400">Senha: admin</p>
                   </button>
                   <button
                     type="button"
@@ -238,6 +246,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                   >
                     <p className="font-bold text-amber-300 text-[11px]">Carlos (Gerente)</p>
                     <p className="text-[9px] text-slate-400">Senha: 123</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fillQuickCredentials('superadmin@vendix.com.br', 'admin')}
+                    className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-left border border-slate-700 transition-colors"
+                  >
+                    <p className="font-bold text-indigo-300 text-[11px]">Suporte SaaS</p>
+                    <p className="text-[9px] text-slate-400">Senha: admin</p>
                   </button>
                 </div>
               </div>

@@ -184,6 +184,18 @@ const defaultBranches: Branch[] = [
 // Seed Users
 const defaultUsers: UserProfile[] = [
   {
+    id: 'user-superadmin-edilson',
+    tenantId: 'tenant-bella',
+    branchId: 'branch-matriz',
+    email: 'edilson9155@gmail.com',
+    password: '91550748',
+    phone: '(11) 99155-0748',
+    fullName: 'Edilson (Super Admin)',
+    role: 'superadmin',
+    permissions: ['all'],
+    isActive: true,
+  },
+  {
     id: 'user-superadmin',
     tenantId: 'tenant-bella',
     branchId: 'branch-matriz',
@@ -1007,6 +1019,39 @@ export function initializeStorageIfNeeded(): void {
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(defaultAuditLogs));
     localStorage.setItem(STORAGE_KEYS.INVOICES, JSON.stringify(defaultInvoices));
     localStorage.setItem(STORAGE_KEYS.INITIALIZED, 'true');
+  } else {
+    // Migrate existing storage to guarantee Edilson superadmin is present
+    try {
+      const usersRaw = localStorage.getItem(STORAGE_KEYS.USERS);
+      if (usersRaw) {
+        const existingUsers: UserProfile[] = JSON.parse(usersRaw);
+        const idx = existingUsers.findIndex(
+          (u) => u.email.toLowerCase() === 'edilson9155@gmail.com'
+        );
+        if (idx >= 0) {
+          existingUsers[idx].password = '91550748';
+          existingUsers[idx].role = 'superadmin';
+          existingUsers[idx].isActive = true;
+          existingUsers[idx].fullName = 'Edilson (Super Admin)';
+        } else {
+          existingUsers.unshift({
+            id: 'user-superadmin-edilson',
+            tenantId: existingUsers[0]?.tenantId || 'tenant-bella',
+            branchId: existingUsers[0]?.branchId || 'branch-matriz',
+            email: 'edilson9155@gmail.com',
+            password: '91550748',
+            phone: '(11) 99155-0748',
+            fullName: 'Edilson (Super Admin)',
+            role: 'superadmin',
+            permissions: ['all'],
+            isActive: true,
+          });
+        }
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(existingUsers));
+      }
+    } catch (e) {
+      console.error('Error migrating users:', e);
+    }
   }
 }
 
