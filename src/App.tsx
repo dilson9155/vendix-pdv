@@ -17,7 +17,6 @@ import { UsersView } from './views/UsersView';
 import { SettingsView } from './views/SettingsView';
 import { SaasAdminView } from './views/SaasAdminView';
 
-// Mobile icons
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -25,15 +24,22 @@ import {
   Package,
   Menu,
   X,
+  Lock,
 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
+  const { currentUser } = useApp();
   const [currentView, setCurrentView] = useState<MainView>('dashboard');
   const [isCashModalOpen, setIsCashModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleSelectView = (view: MainView) => {
+    // Strict security guard: filiais / non-superadmin cannot access saas_admin
+    if (view === 'saas_admin' && currentUser?.role !== 'superadmin') {
+      setCurrentView('dashboard');
+      return;
+    }
     setCurrentView(view);
     setIsMobileMenuOpen(false);
   };
@@ -89,7 +95,29 @@ const AppContent: React.FC = () => {
           {currentView === 'financial' && <FinancialView />}
           {currentView === 'users' && <UsersView />}
           {currentView === 'settings' && <SettingsView onNavigate={handleSelectView} />}
-          {currentView === 'saas_admin' && <SaasAdminView />}
+          {currentView === 'saas_admin' && (
+            currentUser?.role === 'superadmin' ? (
+              <SaasAdminView />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950">
+                <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4 shadow-xl">
+                  <Lock className="w-8 h-8" />
+                </div>
+                <h2 className="text-xl font-black text-white mb-2 font-['Montserrat']">
+                  Acesso Restrito ao Super Administrador
+                </h2>
+                <p className="text-sm text-slate-400 max-w-md mb-6 leading-relaxed">
+                  Filiais e usuários comuns não possuem autorização para acessar o Painel Super Admin ou gerenciar empresas e infraestrutura SaaS.
+                </p>
+                <button
+                  onClick={() => setCurrentView('pdv')}
+                  className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-bold rounded-xl text-xs transition-colors shadow-lg shadow-purple-950/40"
+                >
+                  Ir para o PDV / Caixa
+                </button>
+              </div>
+            )
+          )}
         </main>
       </div>
 

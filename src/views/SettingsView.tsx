@@ -53,6 +53,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     currentTenant.settings.whatsappMessageTemplate || ''
   );
 
+  const isSuperAdmin = currentUser.role === 'superadmin';
+
   // Supabase connection state
   const initialSupabase = getSupabaseConfig();
   const [supabaseUrl, setSupabaseUrl] = useState(initialSupabase.url);
@@ -108,8 +110,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
       whatsappMessageTemplate: whatsappTemplate,
     });
 
-    localStorage.setItem('vendix_supabase_url', supabaseUrl.trim());
-    localStorage.setItem('vendix_supabase_key', supabaseKey.trim());
+    // ONLY Super Admin is permitted to update Supabase connection parameters
+    if (isSuperAdmin) {
+      localStorage.setItem('vendix_supabase_url', supabaseUrl.trim());
+      localStorage.setItem('vendix_supabase_key', supabaseKey.trim());
+    }
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);
@@ -150,7 +155,9 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
             <span>Configurações do Sistema</span>
           </h1>
           <p className="text-xs text-slate-400 mt-0.5">
-            Personalização da empresa, formato de impressão térmica, WhatsApp e credenciais do banco Supabase.
+            {isSuperAdmin
+              ? 'Personalização da empresa, formato de impressão térmica, WhatsApp e credenciais do banco Supabase.'
+              : 'Personalização da filial/empresa, formato de impressão térmica e WhatsApp.'}
           </p>
         </div>
 
@@ -200,8 +207,8 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
             </div>
           </div>
 
-          {/* Quick SaaS Admin Link to register more companies */}
-          {onNavigate && (
+          {/* Quick SaaS Admin Link - Strictly Super Admin only */}
+          {isSuperAdmin && onNavigate && (
             <div className="mt-3 p-3 rounded-xl bg-purple-950/40 border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="text-xs">
                 <span className="font-bold text-purple-300 block">Deseja cadastrar uma nova empresa ou tenant?</span>
@@ -421,83 +428,105 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
           </div>
         </div>
 
-        {/* Supabase Database Connection */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-            <div className="flex items-center gap-2">
-              <Database className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Conexão Supabase PostgreSQL & RLS
-              </h3>
+        {/* Supabase Database Connection - STRICTLY RESTRICTED TO SUPER ADMIN */}
+        {isSuperAdmin ? (
+          <div className="bg-slate-900 border border-purple-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Conexão Supabase PostgreSQL & RLS
+                </h3>
+              </div>
+              <span className="text-[10px] bg-purple-500/20 border border-purple-500/40 px-2.5 py-0.5 rounded-full text-purple-300 font-bold">
+                Exclusivo Super Admin
+              </span>
             </div>
-            <span className="text-[10px] bg-slate-800 px-2 py-0.5 rounded-full text-slate-400">
-              PostgreSQL Multiempresa
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">SUPABASE_URL</label>
+                <input
+                  type="text"
+                  placeholder="https://seu-projeto.supabase.co"
+                  value={supabaseUrl}
+                  onChange={(e) => setSupabaseUrl(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  SUPABASE_ANON_KEY (Chave Pública Anon)
+                </label>
+                <input
+                  type="password"
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  value={supabaseKey}
+                  onChange={(e) => setSupabaseKey(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              {/* Connection Test Output */}
+              {testStatus.message && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                    testStatus.success
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  }`}
+                >
+                  {testStatus.success ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 shrink-0" />
+                  )}
+                  <span>{testStatus.message}</span>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleTestSupabase}
+                  disabled={testStatus.testing}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold border border-emerald-500/30 transition-colors"
+                >
+                  {testStatus.testing ? 'Testando Conexão...' : 'Testar Conexão Supabase'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-slate-700 transition-colors flex items-center gap-1.5"
+                >
+                  {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSql ? 'Copiado!' : 'Copiar Migration SQL'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* Locked banner for Filiais and non-superadmins */
+          <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-5 flex items-center justify-between shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                <Lock className="w-4 h-4" />
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  Infraestrutura & Banco de Dados Supabase
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  As configurações do Supabase e sincronização central na nuvem são restritas exclusivamente ao Super Admin da plataforma.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] bg-slate-800 border border-slate-700 text-slate-400 font-semibold px-2.5 py-1 rounded-full whitespace-nowrap">
+              Restrito ao Super Admin
             </span>
           </div>
-
-          <div className="space-y-3 text-xs">
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">SUPABASE_URL</label>
-              <input
-                type="text"
-                placeholder="https://seu-projeto.supabase.co"
-                value={supabaseUrl}
-                onChange={(e) => setSupabaseUrl(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">
-                SUPABASE_ANON_KEY (Chave Pública Anon)
-              </label>
-              <input
-                type="password"
-                placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                value={supabaseKey}
-                onChange={(e) => setSupabaseKey(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
-              />
-            </div>
-
-            {/* Connection Test Output */}
-            {testStatus.message && (
-              <div
-                className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                  testStatus.success
-                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                    : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
-                }`}
-              >
-                {testStatus.success ? (
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                ) : (
-                  <XCircle className="w-4 h-4 shrink-0" />
-                )}
-                <span>{testStatus.message}</span>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleTestSupabase}
-                disabled={testStatus.testing}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold border border-emerald-500/30 transition-colors"
-              >
-                {testStatus.testing ? 'Testando Conexão...' : 'Testar Conexão Supabase'}
-              </button>
-              <button
-                type="button"
-                onClick={handleCopySql}
-                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-slate-700 transition-colors flex items-center gap-1.5"
-              >
-                {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedSql ? 'Copiado!' : 'Copiar Migration SQL'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
+        )}
 
         {/* Global Save Button */}
         <div className="flex justify-end">

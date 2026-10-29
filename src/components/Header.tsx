@@ -83,41 +83,54 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Tenant & Branch Switchers */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
-          {/* Multi-Tenant Switcher - responsive across all screens */}
-          <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-800/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-slate-700/60 max-w-[130px] xs:max-w-[160px] sm:max-w-[210px] md:max-w-[260px]">
-            <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
-            <select
-              value={currentTenant.id}
-              onChange={(e) => {
-                if (e.target.value === '__add_new__') {
-                  onNavigate?.('saas_admin');
-                } else {
-                  switchTenant(e.target.value);
-                }
-              }}
-              className="bg-transparent text-[11px] sm:text-xs font-semibold text-slate-200 focus:outline-none cursor-pointer w-full truncate"
-              title="Alternar Empresa ou Cadastrar Nova"
-            >
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                  {t.tradeName || t.name}
-                </option>
-              ))}
-              <option value="__add_new__" className="bg-purple-950 text-purple-300 font-bold">
-                ➕ + Cadastrar Nova Empresa...
-              </option>
-            </select>
-            {onNavigate && (
-              <button
-                type="button"
-                onClick={() => onNavigate('saas_admin')}
-                title="Cadastrar / Gerenciar Empresas (Painel SaaS)"
-                className="w-4 h-4 sm:w-5 sm:h-5 rounded flex items-center justify-center text-purple-400 hover:text-white hover:bg-purple-600/40 transition-colors shrink-0"
+          {/* Multi-Tenant Switcher - ONLY Super Admin can view all tenants or register new ones */}
+          {currentUser.role === 'superadmin' ? (
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-800/80 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg border border-purple-500/40 max-w-[140px] xs:max-w-[170px] sm:max-w-[220px] md:max-w-[270px]">
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+              <select
+                value={currentTenant.id}
+                onChange={(e) => {
+                  if (e.target.value === '__add_new__') {
+                    onNavigate?.('saas_admin');
+                  } else {
+                    switchTenant(e.target.value);
+                  }
+                }}
+                className="bg-transparent text-[11px] sm:text-xs font-semibold text-slate-200 focus:outline-none cursor-pointer w-full truncate"
+                title="Super Admin: Alternar Empresa ou Cadastrar Nova"
               >
-                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-              </button>
-            )}
-          </div>
+                {tenants.map((t) => (
+                  <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                    {t.tradeName || t.name}
+                  </option>
+                ))}
+                <option value="__add_new__" className="bg-purple-950 text-purple-300 font-bold">
+                  ➕ + Cadastrar Nova Empresa...
+                </option>
+              </select>
+              {onNavigate && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('saas_admin')}
+                  title="Cadastrar / Gerenciar Empresas (Painel Super Admin)"
+                  className="w-4 h-4 sm:w-5 sm:h-5 rounded flex items-center justify-center text-purple-400 hover:text-white hover:bg-purple-600/40 transition-colors shrink-0"
+                >
+                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            /* Filiais / Non-SuperAdmin: Locked to their own company */
+            <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/60 max-w-[160px] sm:max-w-[220px]">
+              <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400 shrink-0" />
+              <span
+                className="text-[11px] sm:text-xs font-bold text-slate-200 truncate"
+                title={currentTenant.tradeName || currentTenant.name}
+              >
+                {currentTenant.tradeName || currentTenant.name}
+              </span>
+            </div>
+          )}
 
           {/* Branch Switcher */}
           <div className="hidden md:flex items-center gap-1.5 bg-slate-800/80 px-2.5 py-1.5 rounded-lg border border-slate-700/60">
@@ -202,20 +215,22 @@ export const Header: React.FC<HeaderProps> = ({
               <LogIn className="w-3.5 h-3.5 text-slate-400 ml-1" />
             </button>
 
-            {/* Quick role change for immediate dev testing */}
-            <select
-              value={currentUser?.role || 'admin'}
-              onChange={(e) => switchUserRole(e.target.value as UserRole)}
-              className="hidden lg:block bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
-              title="Mudar Perfil para Teste de Permissões"
-            >
-              <option value="superadmin">Super Admin</option>
-              <option value="admin">Administrador</option>
-              <option value="manager">Gerente</option>
-              <option value="cashier">Caixa PDV</option>
-              <option value="stockist">Estoquista</option>
-              <option value="salesperson">Vendedor</option>
-            </select>
+            {/* Quick role change for testing - ONLY available to Super Admin */}
+            {currentUser?.role === 'superadmin' && (
+              <select
+                value={currentUser.role}
+                onChange={(e) => switchUserRole(e.target.value as UserRole)}
+                className="hidden lg:block bg-slate-800 border border-purple-500/40 text-purple-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none cursor-pointer"
+                title="Super Admin: Mudar Perfil para Teste"
+              >
+                <option value="superadmin">Super Admin</option>
+                <option value="admin">Administrador</option>
+                <option value="manager">Gerente</option>
+                <option value="cashier">Caixa PDV</option>
+                <option value="stockist">Estoquista</option>
+                <option value="salesperson">Vendedor</option>
+              </select>
+            )}
           </div>
         </div>
       </div>

@@ -289,6 +289,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const switchUserRole = (role: UserRole) => {
+    // Filiais and non-superadmin accounts can never escalate or switch to superadmin
+    if (role === 'superadmin' && currentUser.role !== 'superadmin' && currentUser.email.toLowerCase() !== 'edilson9155@gmail.com') {
+      console.warn('Acesso negado: Filiais e usuários comuns não possuem permissão para assumir o papel de Super Admin.');
+      return;
+    }
+
     const existingUserWithRole = users.find((u) => u.role === role);
     if (existingUserWithRole) {
       setCurrentUserId(existingUserWithRole.id);

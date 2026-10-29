@@ -272,21 +272,23 @@ export const UsersView: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400 hidden md:inline">Alternar papel rapidamente:</span>
-          <select
-            value={currentUser?.role || 'admin'}
-            onChange={(e) => switchUserRole(e.target.value as UserRole)}
-            className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none cursor-pointer"
-          >
-            <option value="superadmin">Super Admin (Plataforma)</option>
-            <option value="admin">Administrador Geral</option>
-            <option value="manager">Gerente de Loja</option>
-            <option value="cashier">Operador de Caixa</option>
-            <option value="stockist">Estoquista</option>
-            <option value="salesperson">Vendedor</option>
-          </select>
-        </div>
+        {currentUser?.role === 'superadmin' && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-purple-300 font-semibold hidden md:inline">Alternar papel (Teste Super Admin):</span>
+            <select
+              value={currentUser?.role || 'admin'}
+              onChange={(e) => switchUserRole(e.target.value as UserRole)}
+              className="bg-slate-800 border border-purple-500/40 text-purple-300 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none cursor-pointer"
+            >
+              <option value="superadmin">Super Admin (Plataforma)</option>
+              <option value="admin">Administrador Geral</option>
+              <option value="manager">Gerente de Loja</option>
+              <option value="cashier">Operador de Caixa</option>
+              <option value="stockist">Estoquista</option>
+              <option value="salesperson">Vendedor</option>
+            </select>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -333,7 +335,7 @@ export const UsersView: React.FC = () => {
                 className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none"
               >
                 <option value="all">Todos os Cargos</option>
-                <option value="superadmin">Super Admin</option>
+                {currentUser?.role === 'superadmin' && <option value="superadmin">Super Admin</option>}
                 <option value="admin">Administrador</option>
                 <option value="manager">Gerente</option>
                 <option value="cashier">Caixa</option>
@@ -605,7 +607,9 @@ export const UsersView: React.FC = () => {
                     onChange={(e) => setRole(e.target.value as UserRole)}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white"
                   >
-                    <option value="superadmin">Super Admin</option>
+                    {currentUser?.role === 'superadmin' && (
+                      <option value="superadmin">Super Admin (Plataforma)</option>
+                    )}
                     <option value="admin">Administrador Geral</option>
                     <option value="manager">Gerente de Loja</option>
                     <option value="cashier">Operador de Caixa</option>

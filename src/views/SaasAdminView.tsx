@@ -31,10 +31,15 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Database,
+  Save,
+  Server,
 } from 'lucide-react';
+import { getSupabaseConfig, testSupabaseConnection } from '../services/supabase';
 
 export const SaasAdminView: React.FC = () => {
   const {
+    currentUser,
     tenants,
     plans,
     invoices,
@@ -48,10 +53,20 @@ export const SaasAdminView: React.FC = () => {
     saveUser,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'stores' | 'billing' | 'plans'>('stores');
+  const [activeTab, setActiveTab] = useState<'stores' | 'billing' | 'plans' | 'supabase'>('stores');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [billingStatusFilter, setBillingStatusFilter] = useState<string>('all');
+
+  // Supabase states exclusively for Super Admin
+  const initialSupabase = getSupabaseConfig();
+  const [supabaseUrl, setSupabaseUrl] = useState(initialSupabase.url);
+  const [supabaseKey, setSupabaseKey] = useState(initialSupabase.anonKey);
+  const [supabaseTestStatus, setSupabaseTestStatus] = useState<{ testing: boolean; success?: boolean; message?: string }>({
+    testing: false,
+  });
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [savedSupabaseSuccess, setSavedSupabaseSuccess] = useState(false);
 
   // Modals state
   const [isTenantModalOpen, setIsTenantModalOpen] = useState(false);
@@ -237,6 +252,56 @@ export const SaasAdminView: React.FC = () => {
     showToast(`${label} copiado para a área de transferência!`);
   };
 
+  const handleSaveSupabase = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('vendix_supabase_url', supabaseUrl.trim());
+    localStorage.setItem('vendix_supabase_key', supabaseKey.trim());
+    setSavedSupabaseSuccess(true);
+    showToast('Configurações do Supabase salvas com sucesso!');
+    setTimeout(() => setSavedSupabaseSuccess(false), 3000);
+  };
+
+  const handleTestSupabase = async () => {
+    setSupabaseTestStatus({ testing: true });
+    const res = await testSupabaseConnection(supabaseUrl, supabaseKey);
+    setSupabaseTestStatus({ testing: false, success: res.success, message: res.message });
+  };
+
+  const sqlSample = `-- VENDIX SaaS PostgreSQL Migration & RLS Policies
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE TABLE IF NOT EXISTS tenants (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  cnpj_cpf VARCHAR(20) NOT NULL,
+  settings JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+-- Isolamento multiempresa e RLS`;
+
+  const handleCopySql = () => {
+    navigator.clipboard.writeText(sqlSample);
+    setCopiedSql(true);
+    showToast('Script de migração SQL copiado para a área de transferência!');
+    setTimeout(() => setCopiedSql(false), 2000);
+  };
+
+  // Strict role check: Filiais and non-superadmin users are completely barred from this view
+  if (currentUser?.role !== 'superadmin') {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-950">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mb-4 shadow-xl">
+          <Shield className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-black text-white mb-2 font-['Montserrat']">
+          Acesso Restrito ao Super Administrador
+        </h2>
+        <p className="text-sm text-slate-400 max-w-md leading-relaxed">
+          Filiais, lojas e contas não-superadmin não possuem autorização para acessar o painel de administração SaaS e cadastro de empresas.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 space-y-6">
       {/* Toast */}
@@ -365,6 +430,16 @@ export const SaasAdminView: React.FC = () => {
         >
           <Layers className="w-4 h-4" />
           <span>Planos SaaS ({plans.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('supabase')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 whitespace-nowrap ${
+            activeTab === 'supabase' ? 'bg-purple-600 text-white shadow-md' : 'bg-slate-900 text-slate-400 hover:text-white'
+          }`}
+        >
+          <Database className="w-4 h-4 text-emerald-400" />
+          <span>Supabase & Nuvem (Exclusivo Super Admin)</span>
         </button>
       </div>
 
@@ -729,6 +804,178 @@ export const SaasAdminView: React.FC = () => {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Supabase & Central Cloud Database - STRICTLY FOR SUPER ADMIN */}
+      {activeTab === 'supabase' && (
+        <div className="space-y-6">
+          {/* Top Banner Notice */}
+          <div className="bg-gradient-to-r from-purple-950/60 via-slate-900 to-emerald-950/40 border border-purple-500/40 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
+                <Shield className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-black text-white font-['Montserrat']">
+                    Painel Central de Banco de Dados Supabase (PostgreSQL)
+                  </h3>
+                  <span className="bg-purple-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                    Super Admin Exclusivo
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                  Esta área é restrita única e exclusivamente a você como Super Administrador. Nenhuma filial, loja ou operador comum tem visibilidade ou autorização para ver credenciais ou alterar o banco de dados central.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                RLS Multiempresa Ativo
+              </span>
+            </div>
+          </div>
+
+          {/* Form Credentials Card */}
+          <form onSubmit={handleSaveSupabase} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Credenciais de Conexão com Supabase
+                </h4>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Armazenamento Seguro Local & Nuvem
+              </span>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  SUPABASE_URL (URL do Projeto Supabase)
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://seu-projeto.supabase.co"
+                  value={supabaseUrl}
+                  onChange={(e) => setSupabaseUrl(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Obtida nas configurações do seu projeto Supabase em Project Settings &gt; API.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  SUPABASE_ANON_KEY (Chave Pública / Anon Key)
+                </label>
+                <input
+                  type="password"
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  value={supabaseKey}
+                  onChange={(e) => setSupabaseKey(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Chave protegida com suporte nativo a Row Level Security (RLS) para isolamento total de lojas.
+                </p>
+              </div>
+
+              {/* Status Indicator */}
+              {supabaseTestStatus.message && (
+                <div
+                  className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
+                    supabaseTestStatus.success
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : 'bg-rose-500/20 border-rose-500/40 text-rose-300'
+                  }`}
+                >
+                  {supabaseTestStatus.success ? (
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  ) : (
+                    <XCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  )}
+                  <span className="font-medium">{supabaseTestStatus.message}</span>
+                </div>
+              )}
+
+              {savedSupabaseSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <Check className="w-4 h-4" />
+                  <span>Configurações salvas e aplicadas com sucesso no sistema!</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-950/40 transition-colors"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Salvar Credenciais</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleTestSupabase}
+                  disabled={supabaseTestStatus.testing}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold border border-emerald-500/30 transition-colors"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${supabaseTestStatus.testing ? 'animate-spin' : ''}`} />
+                  <span>{supabaseTestStatus.testing ? 'Testando Conexão...' : 'Testar Conexão Supabase'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopySql}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold border border-slate-700 transition-colors"
+                >
+                  {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedSql ? 'Copiado!' : 'Copiar Migration SQL'}</span>
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Architecture & Multi-Tenant Isolation Security Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-purple-400">
+                <Shield className="w-4 h-4" />
+                <h5 className="font-bold text-white text-xs">Isolamento de Filiais</h5>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Cada loja/filial opera estritamente com seus próprios registros (produtos, clientes, vendas, caixa). Nenhuma filial consegue acessar dados de outra filial.
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-emerald-400">
+                <Server className="w-4 h-4" />
+                <h5 className="font-bold text-white text-xs">Supabase Zero-Access</h5>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Telas de configurações e PDV das filiais não exibem chaves nem opções de infraestrutura. Apenas o Super Admin tem autorização de leitura e escrita.
+              </p>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl space-y-2">
+              <div className="flex items-center gap-2 text-indigo-400">
+                <Database className="w-4 h-4" />
+                <h5 className="font-bold text-white text-xs">Novas Empresas Zeradas</h5>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Ao cadastrar uma nova empresa pelo Painel Super Admin, todos os estoques, caixas, vendas e clientes são inicializados zerados e limpos.
+              </p>
             </div>
           </div>
         </div>
