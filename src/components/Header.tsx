@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 
+import { PWAInstallButton } from './PWAInstallButton';
+
 interface HeaderProps {
   onOpenPDV: () => void;
   onOpenCashModal: () => void;
@@ -59,9 +61,11 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="px-4 sm:px-6 py-2.5 flex items-center justify-between gap-4">
         {/* Brand & Slogan */}
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-700 to-purple-500 flex items-center justify-center shadow-lg shadow-purple-900/40">
-            <span className="text-white font-extrabold text-xl tracking-tighter">V</span>
-          </div>
+          <img
+            src="/logo.png"
+            alt="Vendix"
+            className="w-10 h-10 rounded-xl object-contain shadow-lg shadow-purple-900/40 border border-purple-500/30 bg-slate-950 p-0.5"
+          />
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xl font-black tracking-tight text-white font-['Montserrat']">
@@ -170,6 +174,9 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="sm:hidden text-[11px]">PDV</span>
             </button>
           )}
+
+          {/* PWA Fast Install Button */}
+          <PWAInstallButton variant="header" />
 
           {/* User Auth and Role Area */}
           <div className="flex items-center gap-2 pl-2 border-l border-slate-800">

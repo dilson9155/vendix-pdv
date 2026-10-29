@@ -27,6 +27,8 @@ export type MainView =
   | 'settings'
   | 'saas_admin';
 
+import { PWAInstallButton } from './PWAInstallButton';
+
 interface SidebarProps {
   currentView: MainView;
   onSelectView: (view: MainView) => void;
@@ -170,15 +172,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView }) =
           })}
       </div>
 
-      {/* Slogan & Mini Pro Footnote */}
-      <div className="p-3 border-t border-slate-800 m-2 rounded-xl bg-slate-950/50">
-        <div className="flex items-center gap-2 mb-1">
-          <TrendingUp className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs font-bold text-white">VENDIX Retail</span>
+      <div className="flex flex-col">
+        {/* PWA Install Button with Official System Logo */}
+        <PWAInstallButton variant="menu" />
+
+        {/* Slogan & Mini Pro Footnote */}
+        <div className="p-3 border-t border-slate-800 m-2 rounded-xl bg-slate-950/50">
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold text-white">VENDIX Retail</span>
+          </div>
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            Moda, Cosméticos, Acessórios & Variedades.
+          </p>
         </div>
-        <p className="text-[11px] text-slate-400 leading-relaxed">
-          Moda, Cosméticos, Acessórios & Variedades.
-        </p>
       </div>
     </aside>
   );

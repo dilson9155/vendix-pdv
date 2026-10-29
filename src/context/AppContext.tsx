@@ -202,7 +202,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   // Current entity selectors with guaranteed fallbacks
   const currentTenant = tenants.find((t) => t.id === currentTenantId) || tenants[0] || defaultTenants[0];
-  const currentBranch = branches.find((b) => b.id === currentBranchId) || branches[0] || defaultBranches[0];
+  const currentBranch =
+    branches.find((b) => b.id === currentBranchId && b.tenantId === currentTenant.id) ||
+    branches.find((b) => b.tenantId === currentTenant.id) ||
+    branches[0] ||
+    defaultBranches[0];
+
   const currentUser: UserProfile =
     authenticatedUser ||
     users.find((u) => u.id === currentUserId) ||
@@ -222,6 +227,27 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const activeCashRegister = cashRegisters.find(
     (reg) => reg.tenantId === currentTenant.id && reg.branchId === currentBranch.id && reg.status === 'aberto'
   ) || null;
+
+  // Multi-Tenant Isolation: Strictly partitioned collections for current tenant
+  // New companies start completely clean/zeroed out ("tudo zerado")
+  const tenantCategories = categories.filter((c) => c.tenantId === currentTenant.id);
+  const tenantBrands = brands.filter((b) => b.tenantId === currentTenant.id);
+  const tenantSuppliers = suppliers.filter((s) => s.tenantId === currentTenant.id);
+  const tenantProducts = products.filter((p) => p.tenantId === currentTenant.id);
+  const tenantCustomers = customers.filter((c) => c.tenantId === currentTenant.id);
+  const tenantCashRegisters = cashRegisters.filter((r) => r.tenantId === currentTenant.id);
+  const tenantCashMovements = cashMovements.filter((m) => m.tenantId === currentTenant.id);
+  const tenantSales = sales.filter((s) => s.tenantId === currentTenant.id);
+  const tenantAccountsPayable = accountsPayable.filter((p) => p.tenantId === currentTenant.id);
+  const tenantAccountsReceivable = accountsReceivable.filter((r) => r.tenantId === currentTenant.id);
+  const tenantCashbookEntries = cashbookEntries.filter((cb) => cb.tenantId === currentTenant.id);
+  const tenantFinancialAccounts = financialAccounts.filter((fa) => fa.tenantId === currentTenant.id);
+  const tenantCostCenters = costCenters.filter((cc) => cc.tenantId === currentTenant.id);
+  const tenantChartOfAccounts = chartOfAccounts.filter((ca) => ca.tenantId === currentTenant.id);
+  const tenantStockMovements = stockMovements.filter((sm) => sm.tenantId === currentTenant.id);
+  const tenantAuditLogs = auditLogs.filter((al) => al.tenantId === currentTenant.id);
+  const tenantBranches = branches.filter((b) => b.tenantId === currentTenant.id);
+  const tenantUsers = currentUser.role === 'superadmin' ? users : users.filter((u) => u.tenantId === currentTenant.id);
 
   // Sync state to localStorage whenever changed
   useEffect(() => { setStorageItem(STORAGE_KEYS.TENANTS, tenants); }, [tenants]);
@@ -1372,7 +1398,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return { success: false, error: 'Este usuário está inativado no sistema.' };
     }
 
-    if (foundUser.password && foundUser.password !== pass && pass !== '123' && pass !== 'admin') {
+    if (foundUser.password && foundUser.password !== pass) {
       return { success: false, error: 'Senha incorreta. Verifique suas credenciais.' };
     }
 
@@ -1732,6 +1758,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
     setUsers((prev) => [...prev, adminUser]);
 
+    // Create default zero-balance physical cash drawer account for this tenant so cash operations work cleanly
+    const cashAccount: FinancialAccount = {
+      id: `fa-${Date.now()}`,
+      tenantId: newTenant.id,
+      branchId: mainBranch.id,
+      name: 'Caixa Balcão (Gaveta PDV)',
+      accountType: 'caixa_fisico',
+      initialBalance: 0,
+      currentBalance: 0,
+      isActive: true,
+    };
+    setFinancialAccounts((prev) => [...prev, cashAccount]);
+
     logAudit('TENANT_CREATED', 'TENANT', newTenant.id, {
       name: newTenant.name,
       adminEmail: newTenant.email,
@@ -1743,28 +1782,28 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       value={{
         tenants,
         currentTenant,
-        branches,
+        branches: tenantBranches,
         currentBranch,
-        users,
+        users: tenantUsers,
         currentUser,
         plans,
-        categories,
-        brands,
-        suppliers,
-        products,
-        customers,
-        cashRegisters,
+        categories: tenantCategories,
+        brands: tenantBrands,
+        suppliers: tenantSuppliers,
+        products: tenantProducts,
+        customers: tenantCustomers,
+        cashRegisters: tenantCashRegisters,
         activeCashRegister,
-        cashMovements,
-        sales,
-        accountsPayable,
-        accountsReceivable,
-        cashbookEntries,
-        financialAccounts,
-        costCenters,
-        chartOfAccounts,
-        stockMovements,
-        auditLogs,
+        cashMovements: tenantCashMovements,
+        sales: tenantSales,
+        accountsPayable: tenantAccountsPayable,
+        accountsReceivable: tenantAccountsReceivable,
+        cashbookEntries: tenantCashbookEntries,
+        financialAccounts: tenantFinancialAccounts,
+        costCenters: tenantCostCenters,
+        chartOfAccounts: tenantChartOfAccounts,
+        stockMovements: tenantStockMovements,
+        auditLogs: tenantAuditLogs,
         switchTenant,
         switchBranch,
         switchUserRole,
