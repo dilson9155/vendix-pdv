@@ -10,6 +10,7 @@ import {
   productSchema,
   type ProductInput,
 } from "@/lib/validation";
+import { ensureStockLevel } from "@/services/stock-level.service";
 import { z } from "zod";
 
 export type ProductListFilters = {
@@ -197,7 +198,8 @@ export async function getProduct(ctx: AuthContext, id: string): Promise<ProductD
   });
   const stockByVariant = new Map<string, number>();
   for (const row of stocks) {
-    stockByVariant.set(row.variantId, (stockByVariant.get(row.variantId) ?? 0) + Number(row.quantity));
+    const key = row.variantId ?? "";
+    stockByVariant.set(key, (stockByVariant.get(key) ?? 0) + Number(row.quantity));
   }
 
   return {
@@ -404,21 +406,11 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
       keptVariantIds.push(saved.id);
 
       for (const branch of branches) {
-        await tx.stockLevel.upsert({
-          where: {
-            branchId_productId_variantId: {
-              branchId: branch.id,
-              productId: product.id,
-              variantId: saved.id,
-            },
-          },
-          update: {},
-          create: {
-            tenantId: ctx.tenantId,
-            branchId: branch.id,
-            productId: product.id,
-            variantId: saved.id,
-          },
+        await ensureStockLevel(tx, {
+          tenantId: ctx.tenantId,
+          branchId: branch.id,
+          productId: product.id,
+          variantId: saved.id,
         });
       }
     }
@@ -426,21 +418,11 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
     // Produto sem variações (ou que deixou de ter): garante nível de estoque "padrão".
     if (!input.hasVariants) {
       for (const branch of branches) {
-        await tx.stockLevel.upsert({
-          where: {
-            branchId_productId_variantId: {
-              branchId: branch.id,
-              productId: product.id,
-              variantId: "",
-            },
-          },
-          update: {},
-          create: {
-            tenantId: ctx.tenantId,
-            branchId: branch.id,
-            productId: product.id,
-            variantId: "",
-          },
+        await ensureStockLevel(tx, {
+          tenantId: ctx.tenantId,
+          branchId: branch.id,
+          productId: product.id,
+          variantId: null,
         });
       }
     }
@@ -704,10 +686,8 @@ async function getStock(
   variantId: string | null
 ): Promise<number> {
   if (!branchId) return 0;
-  const row = await prisma.stockLevel.findUnique({
-    where: {
-      branchId_productId_variantId: { branchId, productId, variantId: variantId ?? "" },
-    },
+  const row = await prisma.stockLevel.findFirst({
+    where: { branchId, productId, variantId },
     select: { quantity: true },
   });
   return row ? Number(row.quantity) : 0;

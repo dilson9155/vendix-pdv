@@ -36,6 +36,102 @@ const DEFAULT_PLANS = [
   },
 ];
 
+// Catálogo de demonstração. Serve apenas para a empresa "Vendix Demonstração":
+// dados reais de operação devem ser cadastrados pela própria loja.
+const DEMO_PRODUCTS = [
+  { name: "Camiseta Básica Branca", sku: "CAM-001", barcode: "7891000100011", category: "Vestuário", brand: "Vendix Basics", cost: 32.0, price: 79.9, quantity: 24 },
+  { name: "Calça Jeans Skinny", sku: "JEA-001", barcode: "7891000100028", category: "Vestuário", brand: "Vendix Basics", cost: 89.0, price: 189.9, quantity: 12 },
+  { name: "Vestido Floral Midi", sku: "VES-001", barcode: "7891000100035", category: "Vestuário", brand: "Aurora", cost: 110.0, price: 249.9, quantity: 8 },
+  { name: "Tênis Casual Branco", sku: "TEN-001", barcode: "7891000100042", category: "Calçados", brand: "Aurora", cost: 149.9, price: 299.9, quantity: 10 },
+  { name: "Batom Matte Nude", sku: "BAT-001", barcode: "7891000100059", category: "Cosméticos", brand: "Bella", cost: 18.5, price: 49.9, quantity: 36 },
+  { name: "Perfume Floral 100ml", sku: "PER-001", barcode: "7891000100066", category: "Cosméticos", brand: "Bella", cost: 82.0, price: 189.0, quantity: 6 },
+] as const;
+
+async function seedDemoCatalog(tenantId: string, branchId: string, userId: string | null) {
+  const categoryIds = new Map<string, string>();
+  for (const name of [...new Set(DEMO_PRODUCTS.map((product) => product.category))]) {
+    const existing = await prisma.productCategory.findFirst({ where: { tenantId, name }, select: { id: true } });
+    const category = existing ?? (await prisma.productCategory.create({ data: { tenantId, name } }));
+    categoryIds.set(name, category.id);
+  }
+
+  const brandIds = new Map<string, string>();
+  for (const name of [...new Set(DEMO_PRODUCTS.map((product) => product.brand))]) {
+    const existing = await prisma.brand.findFirst({ where: { tenantId, name }, select: { id: true } });
+    const brand = existing ?? (await prisma.brand.create({ data: { tenantId, name } }));
+    brandIds.set(name, brand.id);
+  }
+
+  for (const item of DEMO_PRODUCTS) {
+    const existingProduct = await prisma.product.findFirst({
+      where: { tenantId, sku: item.sku },
+      select: { id: true },
+    });
+
+    const product =
+      existingProduct ??
+      (await prisma.product.create({
+        data: {
+          tenantId,
+          name: item.name,
+          sku: item.sku,
+          barcode: item.barcode,
+          categoryId: categoryIds.get(item.category) ?? null,
+          brandId: brandIds.get(item.brand) ?? null,
+          unit: "UN",
+          cost: item.cost,
+          price: item.price,
+          minStock: 2,
+          trackStock: true,
+        },
+        select: { id: true },
+      }));
+
+    const existingLevel = await prisma.stockLevel.findFirst({
+      where: { branchId, productId: product.id, variantId: null },
+      select: { id: true },
+    });
+
+    if (existingLevel) {
+      continue;
+    }
+
+    await prisma.stockLevel.create({
+      data: { tenantId, branchId, productId: product.id, variantId: null, quantity: item.quantity },
+    });
+
+    await prisma.stockMovement.create({
+      data: {
+        tenantId,
+        branchId,
+        productId: product.id,
+        type: "ENTRADA",
+        quantity: item.quantity,
+        unitCost: item.cost,
+        balanceAfter: item.quantity,
+        reason: "Carga inicial de demonstração",
+        userId,
+      },
+    });
+  }
+
+  const existingCustomer = await prisma.customer.findFirst({ where: { tenantId } });
+  if (!existingCustomer) {
+    await prisma.customer.create({
+      data: {
+        tenantId,
+        name: "Maria Souza",
+        phone: "(11) 98888-1234",
+        whatsapp: "5511988881234",
+        email: "maria.souza@exemplo.com",
+        city: "São Paulo",
+        state: "SP",
+        consentAt: new Date(),
+      },
+    });
+  }
+}
+
 async function main() {
   for (const plan of DEFAULT_PLANS) {
     await prisma.plan.upsert({
@@ -64,6 +160,15 @@ async function main() {
 
   const existingTenant = await prisma.tenant.findFirst({ orderBy: { createdAt: "asc" } });
   if (existingTenant) {
+    const existingBranch =
+      (await prisma.branch.findFirst({ where: { tenantId: existingTenant.id, isHeadquarters: true } })) ??
+      (await prisma.branch.findFirst({ where: { tenantId: existingTenant.id } }));
+    const existingUser = await prisma.user.findFirst({ where: { tenantId: existingTenant.id } });
+
+    if (existingBranch) {
+      await seedDemoCatalog(existingTenant.id, existingBranch.id, existingUser?.id ?? null);
+    }
+
     console.log(`Seed concluído: tenant "${existingTenant.name}" já existe.`);
     return;
   }
@@ -135,6 +240,8 @@ async function main() {
       initialBalance: 500,
     },
   });
+
+  await seedDemoCatalog(tenant.id, branch.id, adminUser.id);
 
   console.log(
     JSON.stringify({

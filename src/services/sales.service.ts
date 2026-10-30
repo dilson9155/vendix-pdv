@@ -21,6 +21,7 @@ import {
   todayISO,
 } from "@/lib/date";
 import { saleSchema, type SaleInput } from "@/lib/validation";
+import { findStockLevel, putStockLevel } from "@/services/stock-level.service";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -294,37 +295,23 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
       void created;
 
       // Estoque com controle de concorrência (transação serializável).
-      const variantKey = line.variantId ?? "";
-      const level = await tx.stockLevel.findUnique({
-        where: {
-          branchId_productId_variantId: {
-            branchId: branch.id,
-            productId: line.productId,
-            variantId: variantKey,
-          },
-        },
+      const variantKey = line.variantId ?? null;
+      const level = await findStockLevel(tx, {
+        branchId: branch.id,
+        productId: line.productId,
+        variantId: variantKey,
       });
       const current = dec(level?.quantity ?? 0);
       const next = round2(current.minus(line.quantity));
       if (next.lessThan(0) && !prefs.allowNegativeStock) {
         throw new Error(`Estoque insuficiente para "${line.name}". Saldo: ${current.toFixed(3)}.`);
       }
-      await tx.stockLevel.upsert({
-        where: {
-          branchId_productId_variantId: {
-            branchId: branch.id,
-            productId: line.productId,
-            variantId: variantKey,
-          },
-        },
-        update: { quantity: next.toFixed(3) },
-        create: {
-          tenantId: ctx.tenantId,
-          branchId: branch.id,
-          productId: line.productId,
-          variantId: variantKey,
-          quantity: next.toFixed(3),
-        },
+      await putStockLevel(tx, {
+        tenantId: ctx.tenantId,
+        branchId: branch.id,
+        productId: line.productId,
+        variantId: variantKey,
+        quantity: next.toFixed(3),
       });
       await tx.stockMovement.create({
         data: {
@@ -648,34 +635,20 @@ export async function cancelSale(
         const returned = returnedByItem.get(item.id) ?? 0;
         const remaining = round2(dec(item.quantity).minus(returned));
         if (remaining.lessThanOrEqualTo(0)) continue;
-        const variantKey = item.variantId ?? "";
-        const level = await tx.stockLevel.findUnique({
-          where: {
-            branchId_productId_variantId: {
-              branchId: sale.branchId,
-              productId: item.productId,
-              variantId: variantKey,
-            },
-          },
+        const variantKey = item.variantId ?? null;
+        const level = await findStockLevel(tx, {
+          branchId: sale.branchId,
+          productId: item.productId,
+          variantId: variantKey,
         });
         const current = dec(level?.quantity ?? 0);
         const next = round2(current.plus(remaining));
-        await tx.stockLevel.upsert({
-          where: {
-            branchId_productId_variantId: {
-              branchId: sale.branchId,
-              productId: item.productId,
-              variantId: variantKey,
-            },
-          },
-          update: { quantity: next.toFixed(3) },
-          create: {
-            tenantId: ctx.tenantId,
-            branchId: sale.branchId,
-            productId: item.productId,
-            variantId: variantKey,
-            quantity: next.toFixed(3),
-          },
+        await putStockLevel(tx, {
+          tenantId: ctx.tenantId,
+          branchId: sale.branchId,
+          productId: item.productId,
+          variantId: variantKey,
+          quantity: next.toFixed(3),
         });
         await tx.stockMovement.create({
           data: {
@@ -864,34 +837,20 @@ export async function createSaleReturn(ctx: AuthContext, raw: unknown) {
       });
 
       if (item.restock) {
-        const variantKey = item.variantId ?? "";
-        const level = await tx.stockLevel.findUnique({
-          where: {
-            branchId_productId_variantId: {
-              branchId: sale.branchId,
-              productId: item.productId,
-              variantId: variantKey,
-            },
-          },
+        const variantKey = item.variantId ?? null;
+        const level = await findStockLevel(tx, {
+          branchId: sale.branchId,
+          productId: item.productId,
+          variantId: variantKey,
         });
         const current = dec(level?.quantity ?? 0);
         const next = round2(current.plus(item.quantity));
-        await tx.stockLevel.upsert({
-          where: {
-            branchId_productId_variantId: {
-              branchId: sale.branchId,
-              productId: item.productId,
-              variantId: variantKey,
-            },
-          },
-          update: { quantity: next.toFixed(3) },
-          create: {
-            tenantId: ctx.tenantId,
-            branchId: sale.branchId,
-            productId: item.productId,
-            variantId: variantKey,
-            quantity: next.toFixed(3),
-          },
+        await putStockLevel(tx, {
+          tenantId: ctx.tenantId,
+          branchId: sale.branchId,
+          productId: item.productId,
+          variantId: variantKey,
+          quantity: next.toFixed(3),
         });
         await tx.stockMovement.create({
           data: {

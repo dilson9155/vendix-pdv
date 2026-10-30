@@ -8,6 +8,7 @@ import { withSerializableTransaction } from "@/lib/transaction";
 import { dec, money, qty } from "@/lib/money";
 import { endOfBusinessDay, startOfBusinessDay } from "@/lib/date";
 import { stockMovementSchema, stockTransferSchema } from "@/lib/validation";
+import { findStockLevel, putStockLevel } from "@/services/stock-level.service";
 import { z } from "zod";
 
 export type StockFilters = {
@@ -221,15 +222,11 @@ async function applyMovement(
     allowNegative: boolean;
   }
 ) {
-  const variantKey = params.variantId ?? "";
-  const level = await tx.stockLevel.findUnique({
-    where: {
-      branchId_productId_variantId: {
-        branchId: params.branchId,
-        productId: params.productId,
-        variantId: variantKey,
-      },
-    },
+  const variantKey = params.variantId ?? null;
+  const level = await findStockLevel(tx, {
+    branchId: params.branchId,
+    productId: params.productId,
+    variantId: variantKey,
   });
 
   const current = dec(level?.quantity ?? 0);
@@ -241,22 +238,12 @@ async function applyMovement(
     );
   }
 
-  const updated = await tx.stockLevel.upsert({
-    where: {
-      branchId_productId_variantId: {
-        branchId: params.branchId,
-        productId: params.productId,
-        variantId: variantKey,
-      },
-    },
-    update: { quantity: qty(next) },
-    create: {
-      tenantId: params.tenantId,
-      branchId: params.branchId,
-      productId: params.productId,
-      variantId: variantKey,
-      quantity: qty(next),
-    },
+  const updated = await putStockLevel(tx, {
+    tenantId: params.tenantId,
+    branchId: params.branchId,
+    productId: params.productId,
+    variantId: variantKey,
+    quantity: qty(next),
   });
 
   await tx.stockMovement.create({
@@ -325,13 +312,11 @@ export async function registerStockMovement(ctx: AuthContext, raw: unknown): Pro
   } else if (input.type === "ENTRADA") {
     delta = Math.abs(input.quantity);
   } else if (input.type === "INVENTARIO") {
-    const level = await prisma.stockLevel.findUnique({
+    const level = await prisma.stockLevel.findFirst({
       where: {
-        branchId_productId_variantId: {
-          branchId: input.branchId,
-          productId: input.productId,
-          variantId: input.variantId ?? "",
-        },
+        branchId: input.branchId,
+        productId: input.productId,
+        variantId: input.variantId ?? null,
       },
       select: { quantity: true },
     });
@@ -470,15 +455,10 @@ export async function applyInventoryCount(ctx: AuthContext, raw: unknown): Promi
   await withSerializableTransaction(async (tx) => {
     for (const item of input.items) {
       await assertProductInTenant(ctx.tenantId, item.productId, item.variantId);
-      const level = await tx.stockLevel.findUnique({
-        where: {
-          branchId_productId_variantId: {
-            branchId: input.branchId,
-            productId: item.productId,
-            variantId: item.variantId ?? "",
-          },
-        },
-        select: { quantity: true },
+      const level = await findStockLevel(tx, {
+        branchId: input.branchId,
+        productId: item.productId,
+        variantId: item.variantId ?? null,
       });
       const current = Number(level?.quantity ?? 0);
       const delta = item.counted - current;
