@@ -52,6 +52,16 @@ import {
   defaultInvoices,
 } from '../services/storage';
 import { addCurrency, subtractCurrency, multiplyCurrency, toCents, fromCents } from '../utils/currency';
+import {
+  isSupabaseConnected,
+  authenticateWithDatabase,
+  fetchTenantDataFromDatabase,
+  dbSaveUser,
+  dbSaveTenant,
+  dbSaveProduct,
+  dbSaveSale,
+  dbSaveCustomer,
+} from '../services/dbSync';
 
 interface AppContextType {
   // Multi-tenant SaaS state
@@ -90,7 +100,12 @@ interface AppContextType {
   switchTenant: (tenantId: string) => void;
   switchBranch: (branchId: string) => void;
   switchUserRole: (role: UserRole) => void;
+  updateTenant: (tenant: Partial<Tenant>) => void;
   updateTenantSettings: (settings: Partial<TenantSettings>) => void;
+  
+  // Cloud Database state
+  isCloudDbConnected: boolean;
+  syncFromDatabase: () => Promise<void>;
   
   // PDV & Sales actions
   openCashRegister: (initialFloat: number, terminalName?: string) => boolean;
@@ -140,7 +155,7 @@ interface AppContextType {
 
   // User management and auth
   authenticatedUser: UserProfile | null;
-  loginUser: (email: string, password: string) => { success: boolean; error?: string };
+  loginUser: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logoutUser: () => void;
   saveUser: (user: Partial<UserProfile>) => void;
   deleteUser: (id: string) => void;
@@ -272,6 +287,34 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => { setStorageItem(STORAGE_KEYS.INVOICES, invoices); }, [invoices]);
   useEffect(() => { setStorageItem(STORAGE_KEYS.CURRENT_AUTH_USER, authenticatedUser); }, [authenticatedUser]);
 
+  // Cloud Database state & Synchronization
+  const [isCloudDbConnected, setIsCloudDbConnected] = useState<boolean>(isSupabaseConnected());
+
+  const syncFromDatabase = async () => {
+    if (!isSupabaseConnected()) return;
+    try {
+      const res = await fetchTenantDataFromDatabase(currentTenantId, currentUser.role);
+      if (res.success) {
+        if (res.tenants && res.tenants.length > 0) setTenants(res.tenants);
+        if (res.branches && res.branches.length > 0) setBranches(res.branches);
+        if (res.users && res.users.length > 0) setUsers(res.users);
+        if (res.products) setProducts(res.products);
+        if (res.customers) setCustomers(res.customers);
+        if (res.sales) setSales(res.sales);
+        setIsCloudDbConnected(true);
+      }
+    } catch (e) {
+      console.warn('Erro ao sincronizar com banco de dados Supabase:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (isSupabaseConnected()) {
+      setIsCloudDbConnected(true);
+      syncFromDatabase();
+    }
+  }, [currentTenantId]);
+
   // Context Switchers
   const switchTenant = (tenantId: string) => {
     const targetTenant = tenants.find((t) => t.id === tenantId);
@@ -306,9 +349,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
   };
 
+  const updateTenant = (tenantData: Partial<Tenant>) => {
+    setTenants((prev) => {
+      const updated = prev.map((t) => (t.id === currentTenant.id ? { ...t, ...tenantData } : t));
+      const current = updated.find((t) => t.id === currentTenant.id);
+      if (current) {
+        dbSaveTenant(current);
+      }
+      return updated;
+    });
+  };
+
   const updateTenantSettings = (newSettings: Partial<TenantSettings>) => {
-    setTenants((prev) =>
-      prev.map((t) => {
+    setTenants((prev) => {
+      const updated = prev.map((t) => {
         if (t.id === currentTenant.id) {
           return {
             ...t,
@@ -316,8 +370,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           };
         }
         return t;
-      })
-    );
+      });
+      const current = updated.find((t) => t.id === currentTenant.id);
+      if (current) {
+        dbSaveTenant(current);
+      }
+      return updated;
+    });
   };
 
   const logAudit = (action: string, entityType: string, entityId: string, details: Record<string, any>) => {
@@ -696,6 +755,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     // 2. Add Sale
     setSales((prev) => [newSale, ...prev]);
+    dbSaveSale(newSale);
 
     // 3. Process Payments into Financial Accounts & Cashbook or Accounts Receivable
     const storeCashAccount = financialAccounts.find(
@@ -1394,9 +1454,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return { success: true, message: `Lembrete de cobrança da fatura ${inv.invoiceNumber} enviado com sucesso para ${inv.tenantName}!` };
   };
 
-  // User Management & Authentication
-  const loginUser = (email: string, pass: string): { success: boolean; error?: string } => {
-    const foundUser = users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+  // User Management & Authentication (Cloud Database & Local Fallback)
+  const loginUser = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Try cloud database authentication with Supabase if connected
+    if (isSupabaseConnected()) {
+      try {
+        const dbAuth = await authenticateWithDatabase(cleanEmail, pass);
+        if (dbAuth.success && dbAuth.user) {
+          const cloudUser = dbAuth.user;
+          setAuthenticatedUser(cloudUser);
+          setCurrentUserId(cloudUser.id);
+          setCurrentTenantId(cloudUser.tenantId);
+          if (cloudUser.branchId) {
+            setCurrentBranchId(cloudUser.branchId);
+          }
+          setUsers((prev) => {
+            const exists = prev.find((u) => u.id === cloudUser.id);
+            return exists ? prev.map((u) => (u.id === cloudUser.id ? cloudUser : u)) : [cloudUser, ...prev];
+          });
+          logAudit('USER_LOGIN', 'USER', cloudUser.id, { email: cloudUser.email, origin: 'SUPABASE_CLOUD' });
+
+          // Fetch tenant data from Supabase for this logged-in account
+          fetchTenantDataFromDatabase(cloudUser.tenantId, cloudUser.role).then((res) => {
+            if (res.success) {
+              if (res.tenants && res.tenants.length > 0) setTenants(res.tenants);
+              if (res.branches && res.branches.length > 0) setBranches(res.branches);
+              if (res.products) setProducts(res.products);
+              if (res.customers) setCustomers(res.customers);
+              if (res.sales) setSales(res.sales);
+            }
+          });
+
+          return { success: true };
+        } else if (dbAuth.error && (dbAuth.error.includes('Senha incorreta') || dbAuth.error.includes('inativo'))) {
+          return { success: false, error: dbAuth.error };
+        }
+      } catch (e) {
+        console.warn('Erro ao autenticar via Supabase, tentando base local:', e);
+      }
+    }
+
+    // 2. Fallback to local stored user profiles
+    const foundUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (!foundUser) {
       return { success: false, error: 'Usuário não cadastrado com este e-mail.' };
     }
@@ -1417,7 +1518,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
 
     setUsers((prev) => prev.map((u) => (u.id === updatedUser.id ? updatedUser : u)));
-    logAudit('USER_LOGIN', 'USER', updatedUser.id, { email: updatedUser.email });
+    logAudit('USER_LOGIN', 'USER', updatedUser.id, { email: updatedUser.email, origin: 'LOCAL_STORAGE' });
+
+    // Asynchronously sync to Supabase in background
+    dbSaveUser(updatedUser);
 
     return { success: true };
   };
@@ -1432,11 +1536,21 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const saveUser = (userData: Partial<UserProfile>) => {
     if (userData.id) {
+      let updatedUser: UserProfile | null = null;
       setUsers((prev) =>
-        prev.map((u) => (u.id === userData.id ? ({ ...u, ...userData } as UserProfile) : u))
+        prev.map((u) => {
+          if (u.id === userData.id) {
+            updatedUser = { ...u, ...userData } as UserProfile;
+            return updatedUser;
+          }
+          return u;
+        })
       );
       if (authenticatedUser?.id === userData.id) {
         setAuthenticatedUser((prev) => (prev ? ({ ...prev, ...userData } as UserProfile) : null));
+      }
+      if (updatedUser) {
+        dbSaveUser(updatedUser);
       }
       logAudit('USER_UPDATED', 'USER', userData.id, { email: userData.email, role: userData.role });
     } else {
@@ -1453,6 +1567,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         isActive: userData.isActive !== undefined ? userData.isActive : true,
       };
       setUsers((prev) => [...prev, newUser]);
+      dbSaveUser(newUser);
       logAudit('USER_CREATED', 'USER', newUser.id, { email: newUser.email, role: newUser.role });
     }
   };
@@ -1508,9 +1623,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Products CRUD
   const saveProduct = (productData: Partial<Product>) => {
     if (productData.id) {
+      let updatedProd: Product | null = null;
       setProducts((prev) =>
-        prev.map((p) => (p.id === productData.id ? ({ ...p, ...productData } as Product) : p))
+        prev.map((p) => {
+          if (p.id === productData.id) {
+            updatedProd = { ...p, ...productData } as Product;
+            return updatedProd;
+          }
+          return p;
+        })
       );
+      if (updatedProd) {
+        dbSaveProduct(updatedProd);
+      }
       logAudit('PRODUCT_UPDATED', 'PRODUCT', productData.id, { name: productData.name });
     } else {
       const newProd: Product = {
@@ -1536,6 +1661,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createdAt: new Date().toISOString(),
       };
       setProducts((prev) => [newProd, ...prev]);
+      dbSaveProduct(newProd);
       logAudit('PRODUCT_CREATED', 'PRODUCT', newProd.id, { name: newProd.name });
     }
   };
@@ -1548,9 +1674,19 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   // Customers CRUD
   const saveCustomer = (customerData: Partial<Customer>) => {
     if (customerData.id) {
+      let updatedCust: Customer | null = null;
       setCustomers((prev) =>
-        prev.map((c) => (c.id === customerData.id ? ({ ...c, ...customerData } as Customer) : c))
+        prev.map((c) => {
+          if (c.id === customerData.id) {
+            updatedCust = { ...c, ...customerData } as Customer;
+            return updatedCust;
+          }
+          return c;
+        })
       );
+      if (updatedCust) {
+        dbSaveCustomer(updatedCust);
+      }
       logAudit('CUSTOMER_UPDATED', 'CUSTOMER', customerData.id, { name: customerData.name });
     } else {
       const newCust: Customer = {
@@ -1570,6 +1706,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         createdAt: new Date().toISOString(),
       };
       setCustomers((prev) => [newCust, ...prev]);
+      dbSaveCustomer(newCust);
       logAudit('CUSTOMER_CREATED', 'CUSTOMER', newCust.id, { name: newCust.name });
     }
   };
@@ -1781,6 +1918,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       name: newTenant.name,
       adminEmail: newTenant.email,
     });
+
+    // Persist to central cloud database
+    dbSaveTenant(newTenant);
+    dbSaveUser(adminUser);
   };
 
   return (
@@ -1813,6 +1954,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         switchTenant,
         switchBranch,
         switchUserRole,
+        updateTenant,
         updateTenantSettings,
         openCashRegister,
         closeCashRegister,
@@ -1851,6 +1993,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         logoutUser,
         saveUser,
         deleteUser,
+        isCloudDbConnected,
+        syncFromDatabase,
       }}
     >
       {children}

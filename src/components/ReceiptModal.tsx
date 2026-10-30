@@ -100,6 +100,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ sale, onClose }) => 
           >
             {/* Header store info */}
             <div className="text-center pb-2 border-b border-dashed border-slate-300">
+              {/* Store Customized Logo */}
+              {currentTenant.settings.logoUrl && (
+                <div className="flex justify-center mb-2">
+                  <img
+                    src={currentTenant.settings.logoUrl}
+                    alt={currentTenant.tradeName || currentTenant.name}
+                    className="max-h-14 max-w-[160px] object-contain filter grayscale contrast-125"
+                  />
+                </div>
+              )}
               <h2 className="font-bold text-xs uppercase tracking-wider">{currentTenant.tradeName || currentTenant.name}</h2>
               <p className="text-[10px] text-slate-600">{currentBranch.name}</p>
               <p className="text-[9px] text-slate-500">{currentBranch.address} - {currentBranch.city}/{currentBranch.state}</p>

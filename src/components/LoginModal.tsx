@@ -23,22 +23,30 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    setIsLoading(true);
 
-    const res = loginUser(email, password);
-    if (res.success) {
-      setSuccessMsg('Login efetuado com sucesso!');
-      setTimeout(() => {
-        onClose();
-      }, 700);
-    } else {
-      setErrorMsg(res.error || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+    try {
+      const res = await loginUser(email, password);
+      if (res.success) {
+        setSuccessMsg('Login efetuado com sucesso!');
+        setTimeout(() => {
+          onClose();
+        }, 700);
+      } else {
+        setErrorMsg(res.error || 'Credenciais inválidas. Verifique seu e-mail e senha.');
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Erro ao efetuar login.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -232,9 +240,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-950/40 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer mt-2"
+                disabled={isLoading}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-950/40 transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Entrar no Sistema
+                {isLoading ? 'Autenticando...' : 'Entrar no Sistema'}
               </button>
             </form>
           ) : (

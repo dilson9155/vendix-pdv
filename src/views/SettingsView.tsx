@@ -18,6 +18,9 @@ import {
   Key,
   Eye,
   EyeOff,
+  Image,
+  Upload,
+  Trash2,
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -31,6 +34,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
   const [tradeName, setTradeName] = useState(currentTenant.tradeName || currentTenant.name);
   const [cnpj, setCnpj] = useState(currentTenant.cnpjCpf);
   const [phone, setPhone] = useState(currentTenant.phone);
+  const [logoUrl, setLogoUrl] = useState(currentTenant.settings.logoUrl || '');
 
   // PDV Settings
   const [receiptFormat, setReceiptFormat] = useState<'58mm' | '80mm'>(
@@ -97,10 +101,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     setTimeout(() => setPasswordFeedback(null), 3500);
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem da logomarca deve ter no máximo 2MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      if (base64) {
+        setLogoUrl(base64);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Save Settings
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     updateTenantSettings({
+      logoUrl,
       receiptFormat,
       receiptFooter,
       allowNegativeStock,
@@ -127,17 +151,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onNavigate }) => {
     setTestStatus({ testing: false, success: res.success, message: res.message });
   };
 
-  const sqlSample = `-- VENDIX SaaS PostgreSQL Migration & RLS Policies
--- Execute no Supabase SQL Editor:
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE TABLE IF NOT EXISTS tenants (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  cnpj_cpf VARCHAR(20) NOT NULL,
-  settings JSONB NOT NULL DEFAULT '{}'::jsonb
-);
+  const sqlSample = `-- VENDIX SaaS: Script Completo de Row Level Security (RLS) & Isolamento de Lojas
+-- Execute no Supabase SQL Editor para isolar os dados de cada filial/empresa:
+-- O arquivo completo está disponível em /supabase/migrations/20261030_vendix_rls_tenant_isolation.sql
+
+-- Habilita RLS em todas as tabelas:
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
--- Ver arquivo completo em /supabase/migrations/20261028_vendix_schema_and_rls.sql`;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts_payable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts_receivable ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cash_movements ENABLE ROW LEVEL SECURITY;
+
+-- Exemplo de política de isolamento estrito (Filial só lê e escreve se tenant_id bater com a sessão):
+CREATE POLICY "tenant_isolation_sales" ON sales
+  FOR ALL
+  USING (
+    tenant_id::text = coalesce(current_setting('app.current_tenant_id', true), '')
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
+  )
+  WITH CHECK (
+    tenant_id::text = coalesce(current_setting('app.current_tenant_id', true), '')
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
+  );`;
 
   const handleCopySql = () => {
     navigator.clipboard.writeText(sqlSample);
@@ -225,6 +263,122 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
               </button>
             </div>
           )}
+        </div>
+
+        {/* Store Logo Section for Receipts & Reports */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Image className="w-4 h-4 text-purple-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                Logomarca da Loja (Cupons Térmicos & Relatórios)
+              </h3>
+            </div>
+            <span className="text-[10px] bg-purple-500/10 border border-purple-500/20 text-purple-300 font-bold px-2 py-0.5 rounded-full">
+              Impressão Térmica & PDF
+            </span>
+          </div>
+
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Envie a logomarca da sua loja ou filial para ser impressa automaticamente no cabeçalho dos cupons de venda (58mm/80mm) e relatórios financeiros e gerenciais.
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Upload & URL Controls */}
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">
+                  Fazer upload de imagem (PNG, JPG, SVG até 2MB)
+                </label>
+                <label className="flex items-center justify-center gap-2 px-4 py-3 bg-slate-800 hover:bg-slate-700/80 border border-dashed border-slate-600 hover:border-purple-500 rounded-xl cursor-pointer text-slate-300 font-medium transition-all group">
+                  <Upload className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+                  <span>Selecionar arquivo do computador ou celular</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5">
+                  Ou informe o link/URL direto da logomarca
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://suaempresa.com.br/logo.png"
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono placeholder:text-slate-500"
+                />
+              </div>
+
+              {logoUrl && (
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setLogoUrl('')}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remover Logomarca</span>
+                  </button>
+                  <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Logo carregada com sucesso
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Live Previews: Color Report Preview & Grayscale Receipt Preview */}
+            <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-4 space-y-3">
+              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-bold block">
+                Pré-visualização nos Documentos
+              </span>
+
+              {logoUrl ? (
+                <div className="grid grid-cols-2 gap-3 text-center">
+                  {/* Report Preview */}
+                  <div className="bg-slate-900 border border-slate-700/60 rounded-lg p-3 flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-purple-300 font-semibold mb-2">Relatórios Gerenciais (Cores)</span>
+                    <div className="h-16 flex items-center justify-center bg-white/5 rounded p-1 w-full">
+                      <img
+                        src={logoUrl}
+                        alt="Logo Loja Relatórios"
+                        className="max-h-14 max-w-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Thermal Receipt Preview */}
+                  <div className="bg-white text-black rounded-lg p-3 flex flex-col items-center justify-center font-mono shadow-inner">
+                    <span className="text-[10px] text-slate-600 font-bold mb-2">Cupom Térmico (Monocromático)</span>
+                    <div className="h-16 flex items-center justify-center p-1 w-full border-b border-dashed border-slate-400">
+                      <img
+                        src={logoUrl}
+                        alt="Logo Loja Cupom"
+                        className="max-h-14 max-w-full object-contain filter grayscale contrast-200"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-28 border border-dashed border-slate-800 rounded-lg flex flex-col items-center justify-center text-slate-500 text-xs">
+                  <Image className="w-6 h-6 mb-1 text-slate-600" />
+                  <span>Nenhuma logomarca cadastrada no momento</span>
+                  <span className="text-[10px] text-slate-600">O sistema utilizará o nome da loja no cabeçalho</span>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Access Password & Security Settings */}

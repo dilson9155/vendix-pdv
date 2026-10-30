@@ -35,9 +35,11 @@ import {
   Split,
   Search,
 } from 'lucide-react';
+import { PrintReportModal, ReportColumn, ReportSummaryCard } from '../components/PrintReportModal';
 
 export const FinancialView: React.FC = () => {
   const {
+    currentTenant,
     accountsPayable,
     accountsReceivable,
     cashbookEntries,
@@ -63,6 +65,22 @@ export const FinancialView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'payable' | 'receivable' | 'cashbook' | 'reports' | 'dre' | 'chart' | 'cost_centers' | 'accounts'
   >('payable');
+
+  // Print Report with Store Logo Modal State
+  const [printModalConfig, setPrintModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle?: string;
+    period?: string;
+    summaryCards?: ReportSummaryCard[];
+    columns: ReportColumn[];
+    data: any[];
+  }>({
+    isOpen: false,
+    title: '',
+    columns: [],
+    data: [],
+  });
 
   // Filters for Contas a Pagar
   const [payStatusFilter, setPayStatusFilter] = useState<string>('all');
@@ -356,6 +374,145 @@ export const FinancialView: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  // Report Print Handlers with Store Logo
+  const handlePrintPayables = () => {
+    const totalAmount = filteredPayables.reduce((acc, p) => acc + p.amount, 0);
+    const totalPaid = filteredPayables.reduce((acc, p) => acc + p.paidAmount, 0);
+    const totalOpen = totalAmount - totalPaid;
+
+    setPrintModalConfig({
+      isOpen: true,
+      title: 'Relatório Gerencial de Contas a Pagar',
+      subtitle: `Empresa: ${currentTenant.tradeName || currentTenant.name} | CNPJ: ${currentTenant.cnpjCpf}`,
+      period: payStartDate && payEndDate ? `${payStartDate} até ${payEndDate}` : 'Todos os períodos',
+      summaryCards: [
+        { label: 'Total Lançado', value: formatBRL(totalAmount) },
+        { label: 'Total Pago', value: formatBRL(totalPaid), color: 'text-emerald-700' },
+        { label: 'Saldo em Aberto', value: formatBRL(totalOpen), color: 'text-rose-700' },
+      ],
+      columns: [
+        { header: 'Fornecedor', key: 'supplierName' },
+        { header: 'Descrição', key: 'description' },
+        { header: 'Doc', key: 'doc', align: 'center' },
+        { header: 'Parcela', key: 'installment', align: 'center' },
+        { header: 'Vencimento', key: 'dueDate', align: 'center' },
+        { header: 'Valor (R$)', key: 'amount', align: 'right' },
+        { header: 'Pago (R$)', key: 'paid', align: 'right' },
+        { header: 'Situação', key: 'status', align: 'center' },
+      ],
+      data: filteredPayables.map((p) => ({
+        supplierName: p.supplierName,
+        description: p.description,
+        doc: p.documentNumber || '-',
+        installment: `${p.installmentNumber || 1}/${p.totalInstallments || 1}`,
+        dueDate: p.dueDate,
+        amount: formatBRL(p.amount),
+        paid: formatBRL(p.paidAmount),
+        status: p.status.toUpperCase(),
+      })),
+    });
+  };
+
+  const handlePrintReceivables = () => {
+    const totalAmount = filteredReceivables.reduce((acc, r) => acc + r.amount, 0);
+    const totalReceived = filteredReceivables.reduce((acc, r) => acc + r.receivedAmount, 0);
+    const totalOpen = totalAmount - totalReceived;
+
+    setPrintModalConfig({
+      isOpen: true,
+      title: 'Relatório Gerencial de Contas a Receber',
+      subtitle: `Empresa: ${currentTenant.tradeName || currentTenant.name} | CNPJ: ${currentTenant.cnpjCpf}`,
+      period: recStartDate && recEndDate ? `${recStartDate} até ${recEndDate}` : 'Todos os períodos',
+      summaryCards: [
+        { label: 'Total a Receber', value: formatBRL(totalAmount) },
+        { label: 'Total Recebido', value: formatBRL(totalReceived), color: 'text-emerald-700' },
+        { label: 'Saldo a Receber', value: formatBRL(totalOpen), color: 'text-amber-700' },
+      ],
+      columns: [
+        { header: 'Cliente / Origem', key: 'customerName' },
+        { header: 'Descrição', key: 'description' },
+        { header: 'Doc / Cupom', key: 'doc', align: 'center' },
+        { header: 'Parcela', key: 'installment', align: 'center' },
+        { header: 'Vencimento', key: 'dueDate', align: 'center' },
+        { header: 'Valor (R$)', key: 'amount', align: 'right' },
+        { header: 'Recebido (R$)', key: 'received', align: 'right' },
+        { header: 'Situação', key: 'status', align: 'center' },
+      ],
+      data: filteredReceivables.map((r) => ({
+        customerName: r.customerName || 'Consumidor',
+        description: r.description,
+        doc: r.documentNumber || '-',
+        installment: `${r.installmentNumber || 1}/${r.totalInstallments || 1}`,
+        dueDate: r.dueDate,
+        amount: formatBRL(r.amount),
+        received: formatBRL(r.receivedAmount),
+        status: r.status.toUpperCase(),
+      })),
+    });
+  };
+
+  const handlePrintCashbook = () => {
+    const totalIn = filteredCashbook.filter((e) => e.entryType === 'entrada').reduce((a, b) => a + b.amount, 0);
+    const totalOut = filteredCashbook.filter((e) => e.entryType === 'saida').reduce((a, b) => a + b.amount, 0);
+    const balance = totalIn - totalOut;
+
+    setPrintModalConfig({
+      isOpen: true,
+      title: 'Livro Caixa & Extrato de Movimentações',
+      subtitle: `Empresa: ${currentTenant.tradeName || currentTenant.name} | CNPJ: ${currentTenant.cnpjCpf}`,
+      period: cbStartDate && cbEndDate ? `${cbStartDate} até ${cbEndDate}` : 'Todos os períodos',
+      summaryCards: [
+        { label: 'Total Entradas (+)', value: formatBRL(totalIn), color: 'text-emerald-700' },
+        { label: 'Total Saídas (-)', value: formatBRL(totalOut), color: 'text-rose-700' },
+        { label: 'Saldo do Período', value: formatBRL(balance), color: balance >= 0 ? 'text-emerald-700' : 'text-rose-700' },
+      ],
+      columns: [
+        { header: 'Data', key: 'date', align: 'center' },
+        { header: 'Conta / Caixa', key: 'account' },
+        { header: 'Descrição', key: 'desc' },
+        { header: 'Tipo', key: 'type', align: 'center' },
+        { header: 'Operador', key: 'user' },
+        { header: 'Valor (R$)', key: 'amount', align: 'right' },
+      ],
+      data: filteredCashbook.map((e) => ({
+        date: e.entryDate,
+        account: e.financialAccountName,
+        desc: e.description,
+        type: e.entryType.toUpperCase(),
+        user: e.userName,
+        amount: (e.entryType === 'entrada' ? '+ ' : '- ') + formatBRL(e.amount),
+      })),
+    });
+  };
+
+  const handlePrintDRE = () => {
+    setPrintModalConfig({
+      isOpen: true,
+      title: 'Demonstrativo do Resultado do Exercício (DRE Gerencial)',
+      subtitle: `Empresa: ${currentTenant.tradeName || currentTenant.name} | CNPJ: ${currentTenant.cnpjCpf}`,
+      period: 'Exercício Corrente',
+      summaryCards: [
+        { label: 'Receita Bruta', value: formatBRL(grossRevenue) },
+        { label: 'Lucro Bruto', value: formatBRL(grossMargin), color: 'text-emerald-700' },
+        { label: 'Resultado Líquido', value: formatBRL(netResult), color: netResult >= 0 ? 'text-emerald-700' : 'text-rose-700' },
+      ],
+      columns: [
+        { header: 'Rubrica Contábil', key: 'rubrica' },
+        { header: 'Valor (R$)', key: 'valor', align: 'right' },
+        { header: 'Margem %', key: 'percent', align: 'right' },
+      ],
+      data: [
+        { rubrica: '(+) RECEITA BRUTA DE VENDAS', valor: formatBRL(grossRevenue), percent: '100.0%' },
+        { rubrica: '(-) Descontos Comerciais PDV', valor: `- ${formatBRL(discountsGiven)}`, percent: `${((discountsGiven / (grossRevenue || 1)) * 100).toFixed(1)}%` },
+        { rubrica: '(=) RECEITA OPERACIONAL LÍQUIDA', valor: formatBRL(netRevenue), percent: `${((netRevenue / (grossRevenue || 1)) * 100).toFixed(1)}%` },
+        { rubrica: '(-) Custo Mercadorias Vendidas (CMV)', valor: `- ${formatBRL(cmv)}`, percent: `${((cmv / (netRevenue || 1)) * 100).toFixed(1)}%` },
+        { rubrica: '(=) LUCRO BRUTO (Margem)', valor: formatBRL(grossMargin), percent: `${grossMarginPercent.toFixed(1)}%` },
+        { rubrica: '(-) Despesas Operacionais / Admin', valor: `- ${formatBRL(paidExpenses)}`, percent: `${((paidExpenses / (netRevenue || 1)) * 100).toFixed(1)}%` },
+        { rubrica: '(=) RESULTADO LÍQUIDO DO PERÍODO', valor: formatBRL(netResult), percent: `${((netResult / (netRevenue || 1)) * 100).toFixed(1)}%` },
+      ],
+    });
+  };
+
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-950 space-y-6">
       {/* Header Banner */}
@@ -497,6 +654,15 @@ export const FinancialView: React.FC = () => {
                 onChange={(e) => setPayEndDate(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white"
               />
+              <button
+                type="button"
+                onClick={handlePrintPayables}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Imprimir Relatório com Logomarca"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Imprimir Relatório</span>
+              </button>
               <button
                 onClick={() =>
                   exportCSV(
@@ -699,6 +865,15 @@ export const FinancialView: React.FC = () => {
                 className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white"
               />
               <button
+                type="button"
+                onClick={handlePrintReceivables}
+                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                title="Imprimir Relatório com Logomarca"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Imprimir Relatório</span>
+              </button>
+              <button
                 onClick={() =>
                   exportCSV(
                     'contas_a_receber',
@@ -869,6 +1044,15 @@ export const FinancialView: React.FC = () => {
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-white"
                 />
               </div>
+              <button
+                type="button"
+                onClick={handlePrintCashbook}
+                className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-1.5 text-xs transition-colors cursor-pointer shrink-0"
+                title="Imprimir Livro Caixa com Logomarca"
+              >
+                <Printer className="w-4 h-4" />
+                <span className="hidden sm:inline">Imprimir</span>
+              </button>
               <button
                 onClick={() =>
                   exportCSV(
@@ -1089,6 +1273,15 @@ export const FinancialView: React.FC = () => {
             >
               <Download className="w-3.5 h-3.5" />
               <span>Exportar DRE CSV</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrintDRE}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer shadow-sm transition-colors"
+              title="Imprimir DRE com Logomarca"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimir DRE com Logo</span>
             </button>
           </div>
 
@@ -1916,6 +2109,18 @@ export const FinancialView: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Printable Report Modal with Store Logo & Headers */}
+      <PrintReportModal
+        isOpen={printModalConfig.isOpen}
+        onClose={() => setPrintModalConfig((prev) => ({ ...prev, isOpen: false }))}
+        title={printModalConfig.title}
+        subtitle={printModalConfig.subtitle}
+        period={printModalConfig.period}
+        summaryCards={printModalConfig.summaryCards}
+        columns={printModalConfig.columns}
+        data={printModalConfig.data}
+      />
     </div>
   );
 };

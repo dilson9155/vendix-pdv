@@ -175,9 +175,9 @@ export const UsersView: React.FC = () => {
     );
   };
 
-  const handleQuickLoginAs = (u: UserProfile) => {
+  const handleQuickLoginAs = async (u: UserProfile) => {
     if (u.password) {
-      const res = loginUser(u.email, u.password);
+      const res = await loginUser(u.email, u.password);
       if (res.success) {
         showToast(`Sessão iniciada como ${u.fullName} (${u.role})`);
       } else {
