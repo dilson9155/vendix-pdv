@@ -132,6 +132,35 @@ async function seedDemoCatalog(tenantId: string, branchId: string, userId: strin
   }
 }
 
+async function seedPlatformAdmin() {
+  const email = (process.env.SEED_PLATFORM_ADMIN_EMAIL || "super@vendix.app").toLowerCase();
+  const password = process.env.SEED_PLATFORM_ADMIN_PASSWORD || "Vendix@2026";
+
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: { isPlatformAdmin: true, active: true },
+    });
+    return { email, password, created: false };
+  }
+
+  await prisma.user.create({
+    data: {
+      tenantId: null,
+      branchId: null,
+      roleId: null,
+      name: "Super Admin",
+      email,
+      passwordHash: await bcrypt.hash(password, 12),
+      isPlatformAdmin: true,
+      active: true,
+    },
+  });
+
+  return { email, password, created: true };
+}
+
 async function main() {
   for (const plan of DEFAULT_PLANS) {
     await prisma.plan.upsert({
@@ -158,6 +187,8 @@ async function main() {
     });
   }
 
+  const platformAdmin = await seedPlatformAdmin();
+
   const existingTenant = await prisma.tenant.findFirst({ orderBy: { createdAt: "asc" } });
   if (existingTenant) {
     const existingBranch =
@@ -169,7 +200,14 @@ async function main() {
       await seedDemoCatalog(existingTenant.id, existingBranch.id, existingUser?.id ?? null);
     }
 
-    console.log(`Seed concluído: tenant "${existingTenant.name}" já existe.`);
+    console.log(
+      JSON.stringify({
+        seed: "tenant existente",
+        tenant: existingTenant.name,
+        loginEmpresa: { email: "admin@demo.vendix.app", password: "Demo@2026" },
+        loginSuperAdmin: { email: platformAdmin.email, password: platformAdmin.password },
+      })
+    );
     return;
   }
 
@@ -253,6 +291,10 @@ async function main() {
       login: {
         email: "admin@demo.vendix.app",
         password: "Demo@2026",
+      },
+      loginSuperAdmin: {
+        email: platformAdmin.email,
+        password: platformAdmin.password,
       },
     })
   );
