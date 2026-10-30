@@ -2,6 +2,7 @@
 import { prisma } from "../src/lib/prisma";
 import bcrypt from "bcryptjs";
 import { ALL_PERMISSIONS } from "../src/lib/permissions";
+import { createTenantFinancialDefaults } from "../src/services/provisioning.service";
 
 const DEFAULT_PLANS = [
   {
@@ -197,6 +198,11 @@ async function main() {
     const existingUser = await prisma.user.findFirst({ where: { tenantId: existingTenant.id } });
 
     if (existingBranch) {
+      await createTenantFinancialDefaults(prisma, {
+        tenantId: existingTenant.id,
+        branchId: existingBranch.id,
+        demo: true,
+      });
       await seedDemoCatalog(existingTenant.id, existingBranch.id, existingUser?.id ?? null);
     }
 

@@ -13,3 +13,6 @@ coverage/
 tsconfig.tsbuildinfo
 next-env.d.ts
 .vercel
+
+.env.local.bak
+.env*.bak

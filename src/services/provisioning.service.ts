@@ -41,6 +41,120 @@ const PAYMENT_METHODS: Array<{ name: string; kind: "DINHEIRO" | "PIX" | "DEBITO"
   { name: "Crediário", kind: "CREDITO_LOJA" },
 ];
 
+export type TenantDefaultsInput = {
+  tenantId: string;
+  branchId: string;
+  demo?: boolean;
+};
+
+/**
+ * Cria os padrões financeiros/operacionais de uma empresa: plano de contas,
+ * conta de caixa, formas de pagamento, centro de custo e preferências.
+ * Idempotente por empresa (não duplica registros existentes).
+ */
+export async function createTenantFinancialDefaults(
+  tx: Prisma.TransactionClient,
+  input: TenantDefaultsInput
+) {
+  const { tenantId, branchId } = input;
+
+  // Plano de contas gerencial
+  const codeToId = new Map<string, string>();
+  const existingAccounts = await tx.chartAccount.findMany({
+    where: { tenantId },
+    select: { id: true, code: true },
+  });
+
+  if (existingAccounts.length === 0) {
+    for (const account of [...CHART_OF_ACCOUNTS].sort((a, b) => a.code.localeCompare(b.code, "pt-BR"))) {
+      const parentId = account.parent ? codeToId.get(account.parent) ?? null : null;
+      const created = await tx.chartAccount.create({
+        data: {
+          tenantId,
+          code: account.code,
+          name: account.name,
+          nature: account.nature,
+          isAnalytic: account.analytic,
+          parentId,
+          level: account.code.split(".").length,
+        },
+      });
+      codeToId.set(account.code, created.id);
+    }
+  } else {
+    for (const account of existingAccounts) {
+      codeToId.set(account.code, account.id);
+    }
+  }
+
+  const cashAccount =
+    (await tx.financialAccount.findFirst({
+      where: { tenantId, type: "CAIXA" },
+      select: { id: true },
+    })) ??
+    (await tx.financialAccount.create({
+      data: {
+        tenantId,
+        branchId,
+        name: "Caixa principal",
+        type: "CAIXA",
+        initialBalance: 0,
+      },
+      select: { id: true },
+    }));
+
+  const receivablesParent = codeToId.get("1.1") ?? null;
+  const expenseParent = codeToId.get("4.9") ?? null;
+
+  const paymentMethods = await tx.paymentMethod.count({ where: { tenantId } });
+  if (paymentMethods === 0) {
+    for (const [index, method] of PAYMENT_METHODS.entries()) {
+      await tx.paymentMethod.create({
+        data: {
+          tenantId,
+          name: method.name,
+          kind: method.kind,
+          financialAccountId: cashAccount.id,
+          requiresCustomer: method.kind === "CREDITO_LOJA",
+          sortOrder: index,
+        },
+      });
+    }
+  }
+
+  const costCenter = await tx.costCenter.findFirst({ where: { tenantId, code: "GERAL" }, select: { id: true } });
+  if (!costCenter) {
+    await tx.costCenter.create({ data: { tenantId, code: "GERAL", name: "Geral" } });
+  }
+
+  const settingsCount = await tx.tenantSetting.count({ where: { tenantId } });
+  if (settingsCount === 0) {
+    const defaultSettings: Array<{ key: string; value: unknown; category: string }> = [
+      { key: "receipt.width", value: "80", category: "pdv" },
+      { key: "receipt.footer", value: "Obrigado pela preferência!", category: "pdv" },
+      { key: "stock.allowNegative", value: false, category: "estoque" },
+      { key: "sales.maxDiscountPercent", value: 10, category: "pdv" },
+      { key: "sales.requireCustomerOnCredit", value: true, category: "pdv" },
+      { key: "sales.defaultRevenueAccountId", value: receivablesParent, category: "financeiro" },
+      { key: "sales.defaultExpenseAccountId", value: expenseParent, category: "financeiro" },
+      { key: "company.demo", value: Boolean(input.demo), category: "sistema" },
+    ];
+
+    for (const setting of defaultSettings) {
+      await tx.tenantSetting.create({
+        data: {
+          tenantId,
+          key: setting.key,
+          value: setting.value as Prisma.InputJsonValue,
+          category: setting.category,
+        },
+      });
+    }
+  }
+
+  return { cashAccountId: cashAccount.id, receivablesParent, expenseParent };
+}
+
 export type ProvisionInput = {
   name: string;
   legalName?: string | null;
@@ -114,75 +228,8 @@ export async function provisionTenant(input: ProvisionInput): Promise<{ tenantId
       },
     });
 
-    // Plano de contas gerencial
-    const codeToId = new Map<string, string>();
-    for (const account of [...CHART_OF_ACCOUNTS].sort((a, b) => a.code.localeCompare(b.code, "pt-BR"))) {
-      const parentId = account.parent ? codeToId.get(account.parent) ?? null : null;
-      const created = await tx.chartAccount.create({
-        data: {
-          tenantId: tenant.id,
-          code: account.code,
-          name: account.name,
-          nature: account.nature,
-          isAnalytic: account.analytic,
-          parentId,
-          level: account.code.split(".").length,
-        },
-      });
-      codeToId.set(account.code, created.id);
-    }
-
-    const cashAccount = await tx.financialAccount.create({
-      data: {
-        tenantId: tenant.id,
-        branchId: branch.id,
-        name: "Caixa principal",
-        type: "CAIXA",
-        initialBalance: 0,
-      },
-    });
-
-    const receivablesParent = codeToId.get("1.1") ?? null;
-    const expenseParent = codeToId.get("4.9") ?? null;
-
-    for (const [index, method] of PAYMENT_METHODS.entries()) {
-      await tx.paymentMethod.create({
-        data: {
-          tenantId: tenant.id,
-          name: method.name,
-          kind: method.kind,
-          financialAccountId: cashAccount.id,
-          requiresCustomer: method.kind === "CREDITO_LOJA",
-          sortOrder: index,
-        },
-      });
-    }
-
-    await tx.costCenter.create({
-      data: { tenantId: tenant.id, code: "GERAL", name: "Geral" },
-    });
-
-    const defaultSettings: Array<{ key: string; value: unknown; category: string }> = [
-      { key: "receipt.width", value: "80", category: "pdv" },
-      { key: "receipt.footer", value: "Obrigado pela preferência!", category: "pdv" },
-      { key: "stock.allowNegative", value: false, category: "estoque" },
-      { key: "sales.maxDiscountPercent", value: 10, category: "pdv" },
-      { key: "sales.requireCustomerOnCredit", value: true, category: "pdv" },
-      { key: "sales.defaultRevenueAccountId", value: receivablesParent, category: "financeiro" },
-      { key: "sales.defaultExpenseAccountId", value: expenseParent, category: "financeiro" },
-      { key: "company.demo", value: Boolean(input.demo), category: "sistema" },
-    ];
-
-    for (const setting of defaultSettings) {
-      await tx.tenantSetting.create({
-        data: {
-          tenantId: tenant.id,
-          key: setting.key,
-          value: setting.value as Prisma.InputJsonValue,
-          category: setting.category,
-        },
-      });
-    }
+    // Plano de contas, conta de caixa, formas de pagamento, centro de custo e preferências
+    await createTenantFinancialDefaults(tx, { tenantId: tenant.id, branchId: branch.id, demo: input.demo });
 
     if (input.planId) {
       await tx.subscription.create({
