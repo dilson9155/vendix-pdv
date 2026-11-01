@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { requireTenant } from "@/lib/tenant";
+import { requireTenantAccess } from "@/lib/tenant";
 import { getCompany } from "@/services/settings.service";
 import { listPlans } from "@/services/saas.service";
 import { formatBRL } from "@/lib/money";
@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Assinatura" };
 export const dynamic = "force-dynamic";
 
 export default async function SubscriptionPage() {
-  const ctx = await requireTenant();
+  const ctx = await requireTenantAccess();
   const company = await getCompany(ctx.tenantId);
   const plans = await listPlans(false);
 

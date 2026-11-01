@@ -95,6 +95,34 @@ export async function requireTenant(): Promise<AuthContext> {
   return ctx;
 }
 
+/**
+ * Guard do shell autenticado (layout de `(app)`).
+ *
+ * Difere de `requireTenant` em dois pontos, ambos necessários para evitar
+ * redirecionamento em círculo:
+ *  - libera o administrador da plataforma sem empresa, pois o painel `/admin`
+ *    vive dentro do mesmo grupo de rotas;
+ *  - não força `/assinatura`, pois essa página também usa este layout. Quem
+ *    decide bloquear a operação é cada página, via `requireTenant`.
+ */
+export async function requireAppArea(): Promise<AuthContext> {
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
+  if (ctx.isPlatformAdmin && !ctx.tenantId) return ctx;
+  if (!ctx.tenantId) redirect("/forbidden");
+  if (!tenantCanOperate(ctx)) redirect("/assinatura");
+  return ctx;
+}
+
+/** Empresa autenticada, mesmo com assinatura bloqueada (usado em `/assinatura`). */
+export async function requireTenantAccess(): Promise<AuthContext> {
+  const ctx = await getAuthContext();
+  if (!ctx) redirect("/login");
+  if (ctx.isPlatformAdmin && !ctx.tenantId) redirect("/admin");
+  if (!ctx.tenantId) redirect("/forbidden");
+  return ctx;
+}
+
 export async function requirePermission(permission: string): Promise<AuthContext> {
   const ctx = await requireTenant();
   if (!hasPermission(ctx, permission)) redirect("/forbidden");

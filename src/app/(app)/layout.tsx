@@ -1,15 +1,39 @@
 import { AppShell, type NavGroup } from "@/components/app-shell";
-import { hasPermission, requireTenant } from "@/lib/tenant";
+import { hasPermission, requireAppArea } from "@/lib/tenant";
 import { listActiveNotices } from "@/services/saas.service";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const ctx = await requireTenant();
+  const ctx = await requireAppArea();
   const notices = await listActiveNotices();
 
   const groups: NavGroup[] = [];
   const push = (title: string, items: NavGroup["items"]) => {
     if (items.length) groups.push({ title, items });
   };
+
+  const platformOnly = ctx.isPlatformAdmin && !ctx.tenantId;
+
+  if (platformOnly) {
+    push("Plataforma", [{ href: "/admin", label: "Plataforma SaaS", icon: "admin" as const }]);
+    return (
+      <AppShell
+        userName={ctx.name}
+        userEmail={ctx.email}
+        tenantName={ctx.tenantName || "Vendix"}
+        branchName={ctx.branchName}
+        planName={ctx.planName}
+        navGroups={groups}
+        notices={notices.map((notice) => ({
+          id: notice.id,
+          title: notice.title,
+          message: notice.message,
+          level: notice.level,
+        }))}
+      >
+        {children}
+      </AppShell>
+    );
+  }
 
   push("Visão geral", [
     ...(hasPermission(ctx, "dashboard.view")
