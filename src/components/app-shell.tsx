@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InstallAppButton } from "@/components/pwa/install-app-button";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/actions/auth.actions";
 
@@ -288,6 +289,9 @@ export function AppShell({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <NoticeBell notices={notices} />
+            <div className="hidden sm:block">
+              <InstallAppButton size="sm" variant="outline" label="Instalar app" />
+            </div>
             <Link
               href="/pdv"
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"

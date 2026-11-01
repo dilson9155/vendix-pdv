@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getCashFlow } from "@/services/finance-core.service";
 import { currentMonthISO, formatDateBR, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
 import { EmptyState, PageHeader, StatCard, TableShell } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "Fluxo de caixa" };
 export const dynamic = "force-dynamic";
@@ -46,11 +47,10 @@ export default async function CashFlowPage({
         title="Fluxo de caixa"
         description="Entradas e saídas do livro caixa por dia (ou mês), com saldo acumulado e projeção de contas em aberto."
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/api/export/financeiro?${exportQuery.toString()}`} prefetch={false}>
-              <Download className="size-4" /> Exportar CSV
-            </Link>
-          </Button>
+          <ExportButtons
+            csvHref={`/api/export/financeiro?${exportQuery.toString()}`}
+            pdfHref={`/api/export/financeiro/pdf?${exportQuery.toString()}`}
+          />
         }
       />
 

@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { listSaleOptions, listSales } from "@/services/sales.service";
 import { currentMonthISO, formatDateTimeBR, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
 import { EmptyState, PageHeader, StatCard, StatusBadge, TableShell } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "Vendas" };
 export const dynamic = "force-dynamic";
@@ -65,11 +66,10 @@ export default async function SalesPage({
         description="Consulta das vendas registradas, com filtros por período, unidade, operador e situação. Vendas canceladas continuam visíveis para rastreabilidade."
         actions={
           <>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/api/export/vendas?${exportQuery.toString()}`} prefetch={false}>
-                <Download className="size-4" /> Exportar CSV
-              </Link>
-            </Button>
+            <ExportButtons
+              csvHref={`/api/export/vendas?${exportQuery.toString()}`}
+              pdfHref={`/api/export/vendas/pdf?${exportQuery.toString()}`}
+            />
             <Button asChild size="sm">
               <Link href="/pdv">Nova venda</Link>
             </Button>

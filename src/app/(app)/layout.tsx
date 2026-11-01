@@ -36,6 +36,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ...(hasPermission(ctx, "products.view")
       ? [
           { href: "/produtos", label: "Produtos", icon: "products" as const },
+          { href: "/produtos/categorias", label: "Categorias e marcas", icon: "products" as const },
           { href: "/estoque", label: "Estoque", icon: "stock" as const },
           { href: "/fornecedores", label: "Fornecedores", icon: "suppliers" as const },
         ]

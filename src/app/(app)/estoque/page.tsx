@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlertTriangle, Download, Search } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 import { hasPermission, requirePermission } from "@/lib/tenant";
 import {
   listStock,
@@ -13,6 +13,7 @@ import { formatDateTimeBR } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
 import { EmptyState, PageHeader, StatCard, TableShell } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 import {
   InventoryCountDialog,
   StockMovementDialog,
@@ -59,11 +60,10 @@ export default async function StockPage({
         description="Saldos por unidade e variação, com histórico de movimentações. Toda alteração passa por transação serializável e auditoria."
         actions={
           <>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/api/export/estoque?${new URLSearchParams({ ...(branchId ? { branchId } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`} prefetch={false}>
-                <Download className="size-4" /> Exportar CSV
-              </Link>
-            </Button>
+            <ExportButtons
+              csvHref={`/api/export/estoque?${new URLSearchParams({ ...(branchId ? { branchId } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`}
+              pdfHref={`/api/export/estoque/pdf?${new URLSearchParams({ ...(branchId ? { branchId } : {}), ...(params.q ? { q: params.q } : {}) }).toString()}`}
+            />
             {canManage && (
               <>
                 <InventoryCountDialog items={items} branches={activeBranches} defaultBranchId={ctx.branchId ?? branchId ?? null} />

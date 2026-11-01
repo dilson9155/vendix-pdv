@@ -314,6 +314,7 @@ export async function registerStockMovement(ctx: AuthContext, raw: unknown): Pro
   } else if (input.type === "INVENTARIO") {
     const level = await prisma.stockLevel.findFirst({
       where: {
+        tenantId: ctx.tenantId,
         branchId: input.branchId,
         productId: input.productId,
         variantId: input.variantId ?? null,

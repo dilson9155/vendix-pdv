@@ -50,7 +50,8 @@ npx prisma db seed           # ou: npm run db:seed
 npm run dev
 ```
 
-Seed de demonstração: `admin@demo.vendix.app` / `Demo@2026`.
+Seed de demonstração: usa `SEED_DEMO_EMAIL` / `SEED_DEMO_PASSWORD` do `.env`
+(padrão `admin@demo.vendix.app` / `Demo@2026`).
 
 ## Testes
 

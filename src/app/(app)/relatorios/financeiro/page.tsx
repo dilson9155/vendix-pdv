@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Download } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getFinanceReport } from "@/services/reports.service";
 import { currentMonthISO, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
 import { PageHeader, StatCard } from "@/components/page-blocks";
-import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "Relatório financeiro" };
 export const dynamic = "force-dynamic";
@@ -38,11 +36,10 @@ export default async function FinanceReportPage({
         title="Relatório financeiro"
         description="Fluxo de caixa, contas a pagar/receber em aberto, vencidas e pagamentos/recebimentos do período."
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/api/export/financeiro?${exportQuery.toString()}`} prefetch={false}>
-              <Download className="size-4" /> Exportar CSV
-            </Link>
-          </Button>
+          <ExportButtons
+            csvHref={`/api/export/financeiro?${exportQuery.toString()}`}
+            pdfHref={`/api/export/financeiro/pdf?${exportQuery.toString()}`}
+          />
         }
       />
 

@@ -81,14 +81,15 @@ export async function postLedgerEntry(tx: Prisma.TransactionClient, input: Ledge
 /** Estorna um lançamento criando a perna inversa vinculada (nunca apaga). */
 export async function reverseLedgerEntry(
   tx: Prisma.TransactionClient,
+  tenantId: string,
   entryId: string,
   reason: string,
   userId: string
 ) {
-  const original = await tx.ledgerEntry.findUnique({ where: { id: entryId } });
+  const original = await tx.ledgerEntry.findFirst({ where: { id: entryId, tenantId } });
   if (!original) throw new Error("Lançamento não encontrado.");
   if (original.reversalOfId) throw new Error("Este lançamento já é um estorno.");
-  const already = await tx.ledgerEntry.findFirst({ where: { reversalOfId: entryId } });
+  const already = await tx.ledgerEntry.findFirst({ where: { reversalOfId: entryId, tenantId } });
   if (already) throw new Error("Este lançamento já foi estornado.");
 
   return tx.ledgerEntry.create({

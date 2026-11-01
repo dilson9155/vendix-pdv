@@ -184,7 +184,7 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
     throw new Error("Informe ao menos uma forma de pagamento.");
   }
 
-  let applied = round2(sumValues(input.payments.map((p) => p.amount)));
+  const applied = round2(sumValues(input.payments.map((p) => p.amount)));
   if (applied.lessThan(total.minus(EPSILON))) {
     throw new Error(
       `Pagamento insuficiente. Total ${total.toFixed(2)} e pago ${applied.toFixed(2)}.`
@@ -676,7 +676,7 @@ export async function cancelSale(
     for (const entry of entries) {
       const already = await tx.ledgerEntry.findFirst({ where: { reversalOfId: entry.id } });
       if (!already) {
-        await reverseLedgerEntry(tx, entry.id, `Cancelamento da venda ${sale.documentNumber}`, ctx.userId);
+        await reverseLedgerEntry(tx, ctx.tenantId, entry.id, `Cancelamento da venda ${sale.documentNumber}`, ctx.userId);
       }
     }
 

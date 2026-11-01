@@ -56,10 +56,20 @@ export async function createSaleReturnAction(raw: unknown): Promise<ActionResult
   });
 }
 
+export type ShareReceiptData = {
+  mode: "manual" | "api";
+  receiptUrl: string;
+  imageUrl: string;
+  caption: string;
+  phone: string;
+  logId: string;
+  url?: string;
+};
+
 export async function shareReceiptAction(raw: {
   saleId: string;
   phone: string;
-}): Promise<ActionResult<{ mode: "manual" | "api"; url?: string; receiptUrl: string }>> {
+}): Promise<ActionResult<ShareReceiptData>> {
   return runAction(async () => {
     const ctx = await actionContext();
     const result = await shareReceiptOnWhatsApp(ctx, raw.saleId, raw.phone);
@@ -67,6 +77,10 @@ export async function shareReceiptAction(raw: {
     return {
       mode: result.mode,
       receiptUrl: result.receiptUrl,
+      imageUrl: result.imageUrl,
+      caption: result.caption,
+      phone: result.phone,
+      logId: result.logId,
       ...(result.mode === "manual" ? { url: result.url } : {}),
     };
   });

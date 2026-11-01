@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { ALL_PERMISSIONS } from "../src/lib/permissions";
 import { createTenantFinancialDefaults } from "../src/services/provisioning.service";
 
+// Acesso da empresa demonstrativa, configurável por ambiente.
+const DEMO_EMAIL = (process.env.SEED_DEMO_EMAIL || "admin@demo.vendix.app").toLowerCase();
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || "Demo@2026";
+
 const DEFAULT_PLANS = [
   {
     code: "BASICO",
@@ -210,7 +214,7 @@ async function main() {
       JSON.stringify({
         seed: "tenant existente",
         tenant: existingTenant.name,
-        loginEmpresa: { email: "admin@demo.vendix.app", password: "Demo@2026" },
+        loginEmpresa: { email: DEMO_EMAIL, password: DEMO_PASSWORD },
         loginSuperAdmin: { email: platformAdmin.email, password: platformAdmin.password },
       })
     );
@@ -225,7 +229,7 @@ async function main() {
       name: "Vendix Demonstração",
       legalName: "Vendix Comércio LTDA",
       document: "12.345.678/0001-90",
-      email: "demo@vendix.app",
+      email: DEMO_EMAIL,
       phone: "(11) 99999-0000",
       status: "ATIVO",
       planId: proPlan?.id ?? basicPlan?.id ?? null,
@@ -260,8 +264,8 @@ async function main() {
       branchId: branch.id,
       roleId: roles[0].id,
       name: "Admin Demo",
-      email: "admin@demo.vendix.app",
-      passwordHash: await bcrypt.hash("Demo@2026", 12),
+      email: DEMO_EMAIL,
+      passwordHash: await bcrypt.hash(DEMO_PASSWORD, 12),
       active: true,
     },
   });
@@ -285,6 +289,14 @@ async function main() {
     },
   });
 
+  // Sem estes padrões o PDV fica sem formas de pagamento e o financeiro sem
+  // plano de contas. A conta de caixa criada acima é reaproveitada.
+  await createTenantFinancialDefaults(prisma, {
+    tenantId: tenant.id,
+    branchId: branch.id,
+    demo: true,
+  });
+
   await seedDemoCatalog(tenant.id, branch.id, adminUser.id);
 
   console.log(
@@ -295,8 +307,8 @@ async function main() {
       subscriptionId: subscription.id,
       financialAccountId: financialAccount.id,
       login: {
-        email: "admin@demo.vendix.app",
-        password: "Demo@2026",
+        email: DEMO_EMAIL,
+        password: DEMO_PASSWORD,
       },
       loginSuperAdmin: {
         email: platformAdmin.email,

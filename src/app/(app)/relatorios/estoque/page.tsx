@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getStockReport, listReportOptions } from "@/services/reports.service";
 import { formatBRL } from "@/lib/money";
 import { EmptyState, PageHeader, StatCard, TableShell } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "Relatório de estoque" };
 export const dynamic = "force-dynamic";
@@ -43,11 +43,10 @@ export default async function StockReportPage({
         title="Relatório de estoque"
         description="Saldos por unidade, variantes, valor de custo e valor de venda, com alerta de estoque mínimo."
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/api/export/estoque?${exportQuery.toString()}`} prefetch={false}>
-              <Download className="size-4" /> Exportar CSV
-            </Link>
-          </Button>
+          <ExportButtons
+            csvHref={`/api/export/estoque?${exportQuery.toString()}`}
+            pdfHref={`/api/export/estoque/pdf?${exportQuery.toString()}`}
+          />
         }
       />
 

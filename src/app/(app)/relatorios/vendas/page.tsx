@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Download } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getSalesReport, listReportOptions } from "@/services/reports.service";
 import { currentMonthISO, formatDateBR, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
 import { EmptyState, PageHeader, StatCard, StatusBadge, TableShell } from "@/components/page-blocks";
+import { ExportButtons } from "@/components/export-buttons";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Relatório de vendas" };
@@ -54,11 +53,10 @@ export default async function SalesReportPage({
         title="Relatório de vendas"
         description="Faturamento, ticket médio, pagamento e operador por período."
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/api/export/vendas?${exportQuery.toString()}`} prefetch={false}>
-              <Download className="size-4" /> Exportar CSV
-            </Link>
-          </Button>
+          <ExportButtons
+            csvHref={`/api/export/vendas?${exportQuery.toString()}`}
+            pdfHref={`/api/export/vendas/pdf?${exportQuery.toString()}`}
+          />
         }
       />
 

@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import {
   Banknote,
   CheckCircle2,
+  Download,
   Loader2,
+  MessageCircle,
   Minus,
   Plus,
   Printer,
@@ -21,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatBRL } from "@/lib/money";
+import { downloadImageUrl, shareImageUrl } from "@/lib/share-image";
 import type { PosProduct } from "@/services/catalog.service";
 import {
   barcodeLookupAction,
@@ -92,6 +95,8 @@ export function PdvTerminal({
   const [success, setSuccess] = useState<{ id: string; documentNumber: string } | null>(null);
   const [sharePhone, setSharePhone] = useState("");
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null);
 
   const [openAmount, setOpenAmount] = useState("");
   const [openTerminal, setOpenTerminal] = useState("Caixa 1");
@@ -252,6 +257,10 @@ export function PdvTerminal({
         return;
       }
       setSuccess(result.data ?? null);
+      setReceiptImageUrl(null);
+      setShareFeedback(null);
+      setShareError(null);
+      setSharePhone("");
       setCart([]);
       setGlobalDiscount("");
       setCustomerId("");
@@ -774,9 +783,12 @@ export function PdvTerminal({
             </div>
 
             <div className="mt-4 rounded-lg border p-3">
-              <p className="text-xs font-semibold">Compartilhar comprovante no WhatsApp</p>
+              <p className="flex items-center gap-1.5 text-xs font-semibold">
+                <MessageCircle className="size-3.5 text-primary" /> Enviar cupom em JPG no WhatsApp
+              </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                Sem integração oficial configurada, o Vendix abre o WhatsApp com a mensagem pronta.
+                No celular abre o compartilhamento nativo; no computador baixa o JPG e abre o
+                WhatsApp Web com a legenda pronta.
               </p>
               <div className="mt-2 flex gap-2">
                 <Input
@@ -785,34 +797,99 @@ export function PdvTerminal({
                   placeholder="(11) 99999-9999"
                   inputMode="tel"
                   className="h-9"
+                  aria-label="WhatsApp do cliente"
                 />
                 <Button
                   type="button"
                   size="sm"
-                  disabled={pending}
+                  disabled={pending || !sharePhone.trim()}
                   onClick={() =>
                     startTransition(async () => {
                       setShareFeedback(null);
+                      setShareError(null);
                       const result = await shareReceiptAction({
                         saleId: success.id,
                         phone: sharePhone,
                       });
                       if (!result.ok) {
-                        setShareFeedback(result.error);
+                        setShareError(result.error);
                         return;
                       }
-                      if (result.data?.mode === "manual" && result.data.url) {
-                        window.open(result.data.url, "_blank", "noopener,noreferrer");
-                        setShareFeedback("Link manual aberto em nova aba. O envio depende de você confirmar no WhatsApp.");
+                      const data = result.data;
+                      if (!data) {
+                        setShareError("Não foi possível preparar o cupom.");
+                        return;
+                      }
+                      setReceiptImageUrl(data.imageUrl);
+
+                      if (data.mode === "api") {
+                        setShareFeedback("Cupom enviado como imagem pela WhatsApp Cloud API.");
+                        return;
+                      }
+
+                      const fileName = `cupom-${success.documentNumber.replace(/[^\w-]+/g, "-")}.jpg`;
+                      const share = await shareImageUrl({
+                        imageUrl: data.imageUrl,
+                        fileName,
+                        caption: data.caption,
+                        phone: data.phone,
+                      });
+                      if (share.mode === "shared") {
+                        setShareFeedback("Cupom enviado pelo compartilhamento do dispositivo.");
+                      } else if (share.mode === "downloaded") {
+                        setShareFeedback(
+                          share.opened
+                            ? "Cupom baixado em JPG e WhatsApp Web aberto. Anexe a imagem baixada."
+                            : "Cupom baixado em JPG. Anexe a imagem no WhatsApp."
+                        );
+                      } else if (share.mode === "cancelled") {
+                        setShareFeedback("Compartilhamento cancelado.");
                       } else {
-                        setShareFeedback("Comprovante enviado pelo WhatsApp Cloud API.");
+                        setShareError(share.error);
                       }
                     })
                   }
                 >
-                  Enviar
+                  {pending ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />}
+                  Enviar JPG
                 </Button>
               </div>
+
+              {receiptImageUrl && (
+                <div className="mt-3 flex items-center gap-3 rounded-lg border bg-muted/30 p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={receiptImageUrl}
+                    alt="Prévia do cupom"
+                    className="h-24 w-auto rounded border bg-white object-contain"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={pending}
+                    onClick={() =>
+                      startTransition(async () => {
+                        setShareError(null);
+                        const download = await downloadImageUrl(
+                          receiptImageUrl,
+                          `cupom-${success.documentNumber.replace(/[^\w-]+/g, "-")}.jpg`
+                        );
+                        if (download.mode === "error") setShareError(download.error);
+                        else setShareFeedback("Cupom baixado em JPG.");
+                      })
+                    }
+                  >
+                    <Download className="size-4" /> Baixar JPG
+                  </Button>
+                </div>
+              )}
+
+              {shareError && (
+                <p role="alert" className="mt-2 text-[11px] leading-relaxed text-red-600">
+                  {shareError}
+                </p>
+              )}
               {shareFeedback && (
                 <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{shareFeedback}</p>
               )}

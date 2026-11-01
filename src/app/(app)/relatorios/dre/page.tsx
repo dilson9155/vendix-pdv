@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { Download } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getDre } from "@/services/dre.service";
 import { currentMonthISO, todayISO } from "@/lib/date";
 import { formatBRL, formatPercent } from "@/lib/money";
 import { PageHeader, StatCard } from "@/components/page-blocks";
-import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "DRE gerencial" };
 export const dynamic = "force-dynamic";
@@ -36,11 +34,10 @@ export default async function DreReportPage({
         title="DRE gerencial"
         description="Demonstração do resultado operacional: receita, deduções, CMV, despesas, resultado e ponto de equilíbrio."
         actions={
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/api/export/dre?${exportQuery.toString()}`} prefetch={false}>
-              <Download className="size-4" /> Exportar CSV
-            </Link>
-          </Button>
+          <ExportButtons
+            csvHref={`/api/export/dre?${exportQuery.toString()}`}
+            pdfHref={`/api/export/dre/pdf?${exportQuery.toString()}`}
+          />
         }
       />
 

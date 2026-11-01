@@ -1,10 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
+import { initInstallPromptCapture } from "@/lib/pwa-install";
 
-/** Registra o service worker apenas em produção para não mascarar dados no dev. */
+/**
+ * Prepara o app instalável:
+ *  - captura o `beforeinstallprompt` cedo (antes dos botões montarem);
+ *  - registra o service worker apenas em produção para não mascarar dados no dev.
+ */
 export function PwaRegister() {
   useEffect(() => {
+    initInstallPromptCapture();
+
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
     const register = () => {

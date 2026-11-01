@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Download, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { listReceivables, listReceivableOptions } from "@/services/receivables.service";
 import { ReceivableActions } from "@/components/finance/receivable-actions";
 import { EmptyState, PageHeader, StatCard, StatusBadge, TableShell } from "@/components/page-blocks";
 import { formatBRL } from "@/lib/money";
 import { Button } from "@/components/ui/button";
+import { ExportButtons } from "@/components/export-buttons";
 
 export const metadata: Metadata = { title: "Contas a receber" };
 export const dynamic = "force-dynamic";
@@ -67,11 +68,10 @@ export default async function ReceivablesPage({
         description="Recebimentos de clientes, vendas a prazo, parcelas e estornos registrados."
         actions={
           <>
-            <Button asChild size="sm" variant="outline">
-              <Link href={`/api/export/financeiro?${exportQuery.toString()}`} prefetch={false}>
-                <Download className="size-4" /> Exportar CSV
-              </Link>
-            </Button>
+            <ExportButtons
+              csvHref={`/api/export/financeiro?${exportQuery.toString()}`}
+              pdfHref={`/api/export/financeiro/pdf?${exportQuery.toString()}`}
+            />
             <Button asChild size="sm">
               <Link href="/clientes">Gerenciar clientes</Link>
             </Button>

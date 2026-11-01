@@ -208,6 +208,7 @@ export default async function SaleDetailPage({ params }: { params: Promise<{ id:
           {hasPermission(ctx, "whatsapp.send") && (
             <ShareReceiptBox
               saleId={sale.id}
+              documentNumber={sale.documentNumber}
               defaultPhone={sale.customer?.whatsapp ?? sale.customer?.phone ?? ""}
             />
           )}

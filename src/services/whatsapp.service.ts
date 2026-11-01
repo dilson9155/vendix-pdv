@@ -4,8 +4,8 @@ import { assertPermission, type AuthContext } from "@/lib/tenant";
 import { decryptConfig, encryptConfig } from "@/lib/crypto";
 import { auditLog } from "@/services/audit.service";
 import { createReceiptToken, getReceiptData } from "@/services/sales.service";
-import { formatBRL } from "@/lib/money";
-import { formatDateTimeBR, onlyDigits } from "@/lib/date";
+import { receiptWhatsAppCaption, renderReceiptJpeg } from "@/services/receipt-image.service";
+import { onlyDigits } from "@/lib/date";
 
 export type WhatsAppTenantConfig = {
   phoneNumberId: string;
@@ -144,24 +144,12 @@ export async function disableWhatsApp(ctx: AuthContext) {
   });
 }
 
-function receiptMessage(input: {
-  companyName: string;
-  documentNumber: string;
-  createdAt: Date;
-  total: number;
-  isDemo: boolean;
-  url: string;
-}): string {
-  return [
-    `${input.companyName} — comprovante ${input.documentNumber}`,
-    `Data: ${formatDateTimeBR(input.createdAt)}`,
-    `Total: ${formatBRL(input.total)}`,
-    input.isDemo ? "Documento de demonstração — não é documento fiscal." : "",
-    `Comprovante: ${input.url}`,
-    "Link pessoal e temporário. Não compartilhe com terceiros.",
-  ]
-    .filter(Boolean)
-    .join("\n");
+function appBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ??
+    process.env.AUTH_URL ??
+    ""
+  ).replace(/\/$/, "");
 }
 
 export type ShareResult =
@@ -169,6 +157,8 @@ export type ShareResult =
       mode: "manual";
       url: string;
       receiptUrl: string;
+      imageUrl: string;
+      caption: string;
       phone: string;
       message: string;
       logId: string;
@@ -177,13 +167,49 @@ export type ShareResult =
       mode: "api";
       messageId: string;
       receiptUrl: string;
+      imageUrl: string;
+      caption: string;
       phone: string;
       logId: string;
     };
 
+type MediaUpload = { mediaId: string };
+
+async function uploadReceiptMedia(
+  config: WhatsAppTenantConfig,
+  jpeg: Buffer,
+  fileName: string
+): Promise<MediaUpload> {
+  const apiVersion = config.apiVersion || process.env.WHATSAPP_API_VERSION || "v21.0";
+  const form = new FormData();
+  form.append("messaging_product", "whatsapp");
+  form.append("file", new Blob([new Uint8Array(jpeg)], { type: "image/jpeg" }), fileName);
+
+  const response = await fetch(
+    `https://graph.facebook.com/${apiVersion}/${config.phoneNumberId}/media`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+      body: form,
+      signal: AbortSignal.timeout(30_000),
+    }
+  );
+
+  const payload = (await response.json().catch(() => null)) as
+    | { id?: string; error?: { message?: string } }
+    | null;
+
+  if (!response.ok || !payload?.id) {
+    throw new Error(payload?.error?.message ?? `HTTP ${response.status}`);
+  }
+  return { mediaId: payload.id };
+}
+
 /**
- * Compartilha o comprovante. Sem credenciais configuradas, NUNCA finge envio:
- * devolve um link wa.me para o operador enviar manualmente e registra o fato.
+ * Compartilha o comprovante como imagem JPEG.
+ * Com a WhatsApp Cloud API configurada, sobe a mídia e envia a imagem com legenda.
+ * Sem credenciais, NUNCA finge envio: devolve o JPEG e o link wa.me para o
+ * operador concluir no aplicativo (no celular, o navegador compartilha o arquivo).
  */
 export async function shareReceiptOnWhatsApp(
   ctx: AuthContext,
@@ -201,15 +227,10 @@ export async function shareReceiptOnWhatsApp(
   const receipt = await getReceiptData(ctx, saleId);
   if (!receipt) throw new Error("Comprovante indisponível.");
   const phone = normalizePhone(rawPhone);
-  const { url: receiptUrl } = await createReceiptToken(ctx, saleId, 7);
-  const message = receiptMessage({
-    companyName: receipt.company.name,
-    documentNumber: receipt.documentNumber,
-    createdAt: receipt.createdAt,
-    total: receipt.total,
-    isDemo: receipt.isDemo,
-    url: receiptUrl,
-  });
+  const { token, url: receiptUrl } = await createReceiptToken(ctx, saleId, 7);
+  const imageUrl = `${appBaseUrl()}/api/comprovante/${token}/imagem`;
+  const caption = receiptWhatsAppCaption(receipt);
+  const fileName = `cupom-${receipt.documentNumber.replace(/[^\w-]+/g, "-")}.jpg`;
 
   const integration = await prisma.integration.findUnique({
     where: { tenantId_provider: { tenantId: ctx.tenantId, provider: "WHATSAPP" } },
@@ -221,6 +242,7 @@ export async function shareReceiptOnWhatsApp(
     (envConfig() !== null || integration?.enabled === true);
 
   if (!canUseApi) {
+    const message = `${caption}\nComprovante: ${receiptUrl}`;
     const manualUrl = `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
     const log = await prisma.whatsAppLog.create({
       data: {
@@ -240,9 +262,40 @@ export async function shareReceiptOnWhatsApp(
       module: "whatsapp",
       entity: "WhatsAppLog",
       entityId: log.id,
-      description: `Link manual de comprovante gerado para a venda ${sale.documentNumber}`,
+      description: `Cupom em imagem gerado para envio manual da venda ${sale.documentNumber}`,
     });
-    return { mode: "manual", url: manualUrl, receiptUrl, phone, message, logId: log.id };
+    return {
+      mode: "manual",
+      url: manualUrl,
+      receiptUrl,
+      imageUrl,
+      caption,
+      phone,
+      message,
+      logId: log.id,
+    };
+  }
+
+  // 1) Sobe o JPEG para a Meta. 2) Envia a mensagem do tipo imagem.
+  let mediaId: string;
+  try {
+    const jpeg = await renderReceiptJpeg(receipt);
+    const upload = await uploadReceiptMedia(config as WhatsAppTenantConfig, jpeg, fileName);
+    mediaId = upload.mediaId;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Falha ao gerar/enviar a imagem";
+    const log = await prisma.whatsAppLog.create({
+      data: {
+        tenantId: ctx.tenantId,
+        saleId,
+        phone,
+        status: "ERRO",
+        provider: "cloud_api",
+        error: detail.slice(0, 1000),
+        createdById: ctx.userId,
+      },
+    });
+    throw new Error(`Não foi possível enviar a imagem do cupom (${detail}). Log ${log.id}.`);
   }
 
   const apiVersion = config.apiVersion || process.env.WHATSAPP_API_VERSION || "v21.0";
@@ -259,8 +312,8 @@ export async function shareReceiptOnWhatsApp(
         body: JSON.stringify({
           messaging_product: "whatsapp",
           to: phone,
-          type: "text",
-          text: { preview_url: true, body: message },
+          type: "image",
+          image: { id: mediaId, caption },
         }),
         signal: AbortSignal.timeout(20_000),
       }
@@ -320,10 +373,10 @@ export async function shareReceiptOnWhatsApp(
     module: "whatsapp",
     entity: "WhatsAppLog",
     entityId: log.id,
-    description: `Comprovante da venda ${sale.documentNumber} enviado pelo WhatsApp Cloud API`,
+    description: `Cupom em imagem da venda ${sale.documentNumber} enviado pelo WhatsApp Cloud API`,
   });
 
-  return { mode: "api", messageId, receiptUrl, phone, logId: log.id };
+  return { mode: "api", messageId, receiptUrl, imageUrl, caption, phone, logId: log.id };
 }
 
 export async function listWhatsAppLogs(ctx: AuthContext, limit = 50) {

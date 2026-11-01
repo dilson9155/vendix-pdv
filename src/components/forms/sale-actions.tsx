@@ -2,11 +2,22 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Check, Copy, Link2, Loader2, MessageCircle, Printer, RotateCcw } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Copy,
+  Download,
+  Link2,
+  Loader2,
+  MessageCircle,
+  Printer,
+  RotateCcw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FormMessage } from "@/components/forms/form-kit";
 import { formatBRL } from "@/lib/money";
+import { downloadImageUrl, shareImageUrl } from "@/lib/share-image";
 import {
   cancelSaleAction,
   createReceiptLinkAction,
@@ -22,18 +33,27 @@ type ReturnItem = {
   unitPrice: number;
 };
 
+function receiptFileName(documentNumber: string | undefined, saleId: string): string {
+  const base = (documentNumber ?? saleId).replace(/[^\w-]+/g, "-");
+  return `cupom-${base}.jpg`;
+}
+
 export function ShareReceiptBox({
   saleId,
   defaultPhone,
+  documentNumber,
 }: {
   saleId: string;
   defaultPhone: string;
+  documentNumber?: string;
 }) {
   const [phone, setPhone] = useState(defaultPhone);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const fileName = receiptFileName(documentNumber, saleId);
 
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm">
@@ -41,8 +61,9 @@ export function ShareReceiptBox({
         <MessageCircle className="size-4 text-primary" /> Compartilhar comprovante
       </h2>
       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-        Gera um link tokenizado com validade de 7 dias. Sem a WhatsApp Cloud API configurada, o
-        Vendix abre o WhatsApp com a mensagem pronta — o envio é confirmado por você.
+        O cupom é gerado como imagem JPG. No celular, abre o compartilhamento nativo; no
+        computador, baixa o JPG e abre o WhatsApp Web com a legenda pronta. O link tokenizado
+        continua válido por 7 dias.
       </p>
       <div className="mt-3 flex gap-2">
         <Input
@@ -66,22 +87,80 @@ export function ShareReceiptBox({
                 setError(result.error);
                 return;
               }
-              if (result.data?.mode === "manual" && result.data.url) {
-                window.open(result.data.url, "_blank", "noopener,noreferrer");
+              const data = result.data;
+              if (!data) {
+                setError("Não foi possível preparar o comprovante.");
+                return;
+              }
+              setImageUrl(data.imageUrl);
+
+              if (data.mode === "api") {
+                setFeedback("Cupom enviado como imagem pela WhatsApp Cloud API.");
+                return;
+              }
+
+              const share = await shareImageUrl({
+                imageUrl: data.imageUrl,
+                fileName,
+                caption: data.caption,
+                phone: data.phone,
+              });
+              if (share.mode === "shared") {
+                setFeedback("Cupom enviado pelo compartilhamento do dispositivo. Confirme no WhatsApp.");
+              } else if (share.mode === "downloaded") {
                 setFeedback(
-                  "WhatsApp aberto em nova aba. Confirme o envio da mensagem no aplicativo."
+                  share.opened
+                    ? "Cupom baixado em JPG e WhatsApp Web aberto. Anexe a imagem baixada."
+                    : "Cupom baixado em JPG. Anexe a imagem no WhatsApp."
                 );
+              } else if (share.mode === "cancelled") {
+                setFeedback("Compartilhamento cancelado.");
               } else {
-                setFeedback("Comprovante enviado pela WhatsApp Cloud API.");
+                setError(share.error);
               }
             });
           }}
         >
           {pending ? <Loader2 className="size-4 animate-spin" /> : null}
-          Enviar
+          Enviar cupom em JPG
         </Button>
       </div>
       <FormMessage error={error} success={feedback} />
+
+      {imageUrl && (
+        <div className="mt-3 flex items-start gap-3 rounded-lg border bg-muted/30 p-2">
+          {/* Prévia do cupom gerado (token de curta duração). */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl}
+            alt="Prévia do cupom"
+            className="h-28 w-auto rounded border bg-white object-contain"
+          />
+          <div className="min-w-0 flex-1 text-[11px] text-muted-foreground">
+            <p className="font-medium text-foreground">Cupom em JPG pronto</p>
+            <p className="mt-0.5 leading-relaxed">
+              Baixe o arquivo para anexar manualmente ou reutilize em outro canal.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => {
+                setError(null);
+                startTransition(async () => {
+                  const download = await downloadImageUrl(imageUrl, fileName);
+                  if (download.mode === "error") setError(download.error);
+                  else setFeedback("Cupom baixado em JPG.");
+                });
+              }}
+            >
+              <Download className="size-4" /> Baixar JPG
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           type="button"

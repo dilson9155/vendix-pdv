@@ -569,7 +569,7 @@ export async function reversePayablePayment(ctx: AuthContext, paymentId: string,
 
   const result = await withSerializableTransaction(async (tx) => {
     if (payment.ledgerEntryId) {
-      await reverseLedgerEntry(tx, payment.ledgerEntryId, reason, ctx.userId);
+      await reverseLedgerEntry(tx, ctx.tenantId, payment.ledgerEntryId, reason, ctx.userId);
     }
     await tx.payablePayment.update({
       where: { id: payment.id },
