@@ -1,4 +1,6 @@
 import "server-only";
+import path from "node:path";
+import { Resvg } from "@resvg/resvg-js";
 import sharp from "sharp";
 import type { ReceiptData } from "@/services/sales.service";
 import { formatBRL, formatQty } from "@/lib/money";
@@ -7,9 +9,10 @@ import { formatDateTimeBR, formatDocument } from "@/lib/date";
 // ---------------------------------------------------------------------------
 // Cupom em JPEG para WhatsApp.
 //
-// O layout é gerado como SVG e rasterizado pelo sharp (libvips/librsvg), que já
-// é dependência do projeto. Evitamos o Satori (`next/og`) de propósito: ele
-// carrega uma cópia própria do sharp, o que quebra em alguns ambientes.
+// O layout é gerado como SVG e rasterizado pelo resvg com as fontes DejaVu
+// empacotadas no projeto. Assim o texto não depende das fontes do sistema —
+// que não existem no runtime da Vercel — e o resultado é idêntico em qualquer
+// ambiente. Depois o sharp converte o PNG em JPEG.
 // ---------------------------------------------------------------------------
 
 const WIDTH = 760;
@@ -18,7 +21,12 @@ const RIGHT = WIDTH - PADDING;
 const TOTAL_RIGHT = RIGHT;
 const UNIT_RIGHT = RIGHT - 120;
 const QTY_RIGHT = UNIT_RIGHT - 100;
-const FONT_FAMILY = "DejaVu Sans, Arial, Helvetica, sans-serif";
+const FONT_FAMILY = "DejaVu Sans";
+const FONT_DIR = path.join(process.cwd(), "src", "assets", "fonts");
+const FONT_FILES = [
+  path.join(FONT_DIR, "DejaVuSans.ttf"),
+  path.join(FONT_DIR, "DejaVuSans-Bold.ttf"),
+];
 const INK = "#111827";
 const MUTED = "#4b5563";
 const SOFT = "#6b7280";
@@ -241,9 +249,18 @@ export async function renderReceiptJpeg(receipt: ReceiptData): Promise<Buffer> {
   const height = Math.ceil(y);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}"><rect width="${WIDTH}" height="${height}" fill="#ffffff"/><g font-family="${FONT_FAMILY}">${parts.join("")}</g></svg>`;
 
-  return sharp(Buffer.from(svg, "utf8"))
-    .jpeg({ quality: 90, mozjpeg: true })
-    .toBuffer();
+  const png = new Resvg(svg, {
+    font: {
+      fontFiles: FONT_FILES,
+      loadSystemFonts: false,
+      defaultFontFamily: "DejaVu Sans",
+    },
+    fitTo: { mode: "width", value: WIDTH },
+  })
+    .render()
+    .asPng();
+
+  return sharp(png).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
 /** Texto curto que acompanha a imagem no WhatsApp. */
