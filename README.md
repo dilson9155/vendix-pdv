@@ -45,8 +45,10 @@ cosméticos e acessórios: PDV, estoque, vendas, financeiro, DRE e relatórios.
 - **Régua de cobrança**: cron diário em `/api/cron/billing` marca vencidas e,
   com a suspensão automática ligada, bloqueia lojas após a carência. Ao quitar
   a última cobrança em aberto, a loja volta a operar automaticamente.
-- **PWA**: instalação pelo botão “Instalar app” (prompt nativo + passo a passo
-  para iOS/desktop), service worker apenas em produção.
+- **PWA**: o botão “Instalar aplicativo” abre direto o instalador nativo do
+  navegador; o passo a passo aparece apenas quando não existe prompt (iOS ou
+  navegador sem suporte). Ícones e marca usam o “V” em degradê ciano/azul, sem
+  wordmark, gerados por `scripts/generate-pwa-icons.mjs`.
 
 ## Regras de negócio críticas
 

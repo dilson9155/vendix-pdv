@@ -17,6 +17,13 @@ export type InstallState = {
   android: boolean;
 };
 
+declare global {
+  interface Window {
+    __vendixInstallPrompt?: InstallPromptEvent | null;
+    __vendixInstalled?: boolean;
+  }
+}
+
 let deferredPrompt: InstallPromptEvent | null = null;
 let installed = false;
 let listening = false;
@@ -68,17 +75,21 @@ function notify() {
 export function initInstallPromptCapture(): void {
   if (typeof window === "undefined" || listening) return;
   listening = true;
-  installed = isStandaloneDisplay();
+  installed = isStandaloneDisplay() || window.__vendixInstalled === true;
+  if (window.__vendixInstallPrompt) deferredPrompt = window.__vendixInstallPrompt;
   rebuildSnapshot();
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event as InstallPromptEvent;
+    window.__vendixInstallPrompt = deferredPrompt;
     notify();
   });
 
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
+    window.__vendixInstallPrompt = null;
+    window.__vendixInstalled = true;
     installed = true;
     notify();
   });
@@ -120,6 +131,7 @@ export async function promptInstall(): Promise<
     await prompt.prompt();
     const choice = await prompt.userChoice;
     deferredPrompt = null;
+    window.__vendixInstallPrompt = null;
     if (choice.outcome === "accepted") {
       installed = true;
     }
@@ -127,6 +139,7 @@ export async function promptInstall(): Promise<
     return choice.outcome;
   } catch {
     deferredPrompt = null;
+    window.__vendixInstallPrompt = null;
     notify();
     return "dismissed";
   }

@@ -1,6 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Vendix">
-  <rect width="64" height="64" rx="16" fill="#0F172A"/>
-  <circle cx="32" cy="32" r="25" fill="#6D28D9"/>
-  <path d="M19 21h7.5L32 40.5 37.5 21H45L35.4 47h-6.8L19 21Z" fill="#fff"/>
-  <circle cx="47" cy="17" r="5" fill="#FF6B6B"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Vendix">
+  <defs>
+    <linearGradient id="vx-plate" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0C1B36" />
+      <stop offset="1" stop-color="#050912" />
+    </linearGradient>
+    <radialGradient id="vx-aura" cx="0" cy="0" r="1" gradientTransform="translate(350 148) rotate(128) scale(330)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE" stop-opacity=".34" />
+      <stop offset=".55" stop-color="#1D4ED8" stop-opacity=".12" />
+      <stop offset="1" stop-color="#1D4ED8" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="vx-left" x1="146" y1="156" x2="256" y2="356" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3B8CFF" />
+      <stop offset=".55" stop-color="#2563EB" />
+      <stop offset="1" stop-color="#1029B8" />
+    </linearGradient>
+    <linearGradient id="vx-top" x1="372" y1="150" x2="318" y2="250" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#53F7E5" />
+      <stop offset="1" stop-color="#22CFF5" />
+    </linearGradient>
+    <linearGradient id="vx-bottom" x1="318" y1="242" x2="256" y2="356" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB" />
+      <stop offset="1" stop-color="#1734C0" />
+    </linearGradient>
+    <filter id="vx-shadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000814" flood-opacity=".55" />
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="118" fill="url(#vx-plate)" />
+  <rect width="512" height="512" rx="118" fill="url(#vx-aura)" />
+  <rect x="1.5" y="1.5" width="509" height="509" rx="116.5" fill="none" stroke="#fff" stroke-opacity=".09" />
+
+  <g filter="url(#vx-shadow)">
+    <path d="M372 150 318 250" fill="none" stroke="url(#vx-top)" stroke-width="88" stroke-linecap="round" />
+    <path d="M318 242 256 356" fill="none" stroke="url(#vx-bottom)" stroke-width="88" stroke-linecap="butt" />
+    <path d="M146 156 256 356" fill="none" stroke="url(#vx-left)" stroke-width="88" stroke-linecap="round" />
+  </g>
+
+  <path d="M279 221 357 263" fill="none" stroke="#020A1A" stroke-opacity=".35" stroke-width="7" stroke-linecap="round" />
+  <path d="M125 184 227 349" fill="none" stroke="#DBEAFE" stroke-opacity=".24" stroke-width="7" stroke-linecap="round" />
+  <path d="M387 181 286 348" fill="none" stroke="#ECFEFF" stroke-opacity=".18" stroke-width="6" stroke-linecap="round" />
 </svg>

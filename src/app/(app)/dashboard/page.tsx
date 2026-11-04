@@ -165,7 +165,7 @@ export default async function DashboardPage({
                     {formatBRL(day.revenue)}
                   </span>
                   <div
-                    className="w-full max-w-10 rounded-t bg-gradient-to-t from-violet-600 to-fuchsia-400 transition group-hover:opacity-80"
+                    className="w-full max-w-10 rounded-t bg-gradient-to-t from-blue-600 to-cyan-400 transition group-hover:opacity-80"
                     style={{ height: `${Math.max(4, (day.revenue / maxDaily) * 160)}px` }}
                     title={`${day.date}: ${formatBRL(day.revenue)} em ${day.count} venda(s)`}
                   />
@@ -193,7 +193,7 @@ export default async function DashboardPage({
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-500"
+                      className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-400"
                       style={{ width: `${Math.max(2, item.percent)}%` }}
                     />
                   </div>

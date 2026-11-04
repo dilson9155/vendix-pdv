@@ -1,7 +1,14 @@
 /* Vendix — service worker mínimo e conservador.
    Nunca cacheia respostas autenticadas, POSTs ou dados financeiros. */
-const CACHE = "vendix-shell-v1";
-const SHELL = ["/", "/offline", "/icons/icon.svg", "/icons/icon-192.png", "/icons/icon-512.png"];
+const CACHE = "vendix-shell-v2";
+const SHELL = [
+  "/",
+  "/offline",
+  "/icons/icon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

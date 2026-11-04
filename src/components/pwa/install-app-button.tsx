@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { VendixMark } from "@/components/brand/vendix-mark";
 import { cn } from "@/lib/utils";
 import {
   getInstallState,
@@ -44,7 +45,7 @@ export function InstallAppButton({
   className,
   variant = "outline",
   size = "sm",
-  label = "Instalar app",
+  label = "Instalar aplicativo",
   iconOnly = false,
   fullWidth = false,
 }: Props) {
@@ -54,7 +55,7 @@ export function InstallAppButton({
     getServerInstallState
   );
   const [pending, setPending] = useState(false);
-  const [feedback, setFeedback] = useState<"accepted" | "dismissed" | "manual" | null>(null);
+  const [feedback, setFeedback] = useState<"accepted" | "dismissed" | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
   useEffect(() => {
@@ -64,11 +65,13 @@ export function InstallAppButton({
   async function handleClick() {
     setFeedback(null);
     setPending(true);
+    // Abre o instalador nativo imediatamente. Só mostramos o passo a passo
+    // quando o navegador realmente não oferece o prompt (iOS, por exemplo).
     const outcome = await promptInstall();
     setPending(false);
     if (outcome === "unsupported") {
+      setFeedback(null);
       setHelpOpen(true);
-      setFeedback("manual");
       return;
     }
     setFeedback(outcome);
@@ -105,27 +108,37 @@ export function InstallAppButton({
         ) : (
           <Download className="size-4" />
         )}
-        {!iconOnly && (pending ? "Instalando..." : label)}
+        {!iconOnly && (pending ? "Abrindo instalador..." : label)}
       </Button>
 
       {feedback === "accepted" && (
-        <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+        <span
+          aria-live="polite"
+          className="ml-2 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700"
+        >
           <CheckCircle2 className="size-3.5" /> Instalado
         </span>
       )}
       {feedback === "dismissed" && (
-        <span className="ml-2 text-[11px] text-muted-foreground">Instalação cancelada</span>
+        <span aria-live="polite" className="ml-2 text-[11px] text-muted-foreground">
+          Instalação cancelada
+        </span>
       )}
 
       <Dialog open={helpOpen} onOpenChange={setHelpOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Como instalar o Vendix</DialogTitle>
-            <DialogDescription>
-              {state.ios
-                ? "No iPhone/iPad a instalação é feita pelo Safari, em dois toques."
-                : "Seu navegador não abriu o instalador automático. Use o caminho abaixo."}
-            </DialogDescription>
+            <div className="mb-1 flex items-center gap-3">
+              <VendixMark className="size-10 shadow-lg shadow-slate-900/15" />
+              <div>
+                <DialogTitle>Instalar o aplicativo</DialogTitle>
+                <DialogDescription className="mt-0.5">
+                  {state.ios
+                    ? "No iPhone/iPad a instalação é feita pelo Safari, em dois toques."
+                    : "Seu navegador não abriu o instalador automático. Use o caminho abaixo."}
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
 
           {state.ios ? (

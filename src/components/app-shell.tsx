@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InstallAppButton } from "@/components/pwa/install-app-button";
+import { VendixMark } from "@/components/brand/vendix-mark";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/app/actions/auth.actions";
 
@@ -81,10 +82,8 @@ export type ShellNotice = {
 
 function Brand() {
   return (
-    <Link href="/dashboard" className="flex items-center gap-3 px-4 py-5">
-      <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-lg font-black text-white shadow-lg shadow-violet-900/30">
-        V
-      </span>
+    <Link href="/dashboard" className="group flex items-center gap-3 px-4 py-5">
+      <VendixMark className="size-10 shadow-lg shadow-cyan-950/40 transition-transform duration-200 group-hover:scale-[1.04]" />
       <span className="min-w-0 leading-tight">
         <span className="block truncate text-base font-semibold tracking-tight text-sidebar-foreground">
           Vendix

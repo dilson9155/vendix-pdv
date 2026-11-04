@@ -5,6 +5,7 @@ import { Receipt, ShieldCheck } from "lucide-react";
 import { getPublicCharge } from "@/services/billing.service";
 import { publicChargeUrl } from "@/lib/app-url";
 import { ChargePaymentPanel } from "@/components/billing/charge-payment-panel";
+import { VendixMark } from "@/components/brand/vendix-mark";
 
 export const metadata: Metadata = {
   title: "Pagamento da mensalidade",
@@ -28,9 +29,7 @@ export default async function PublicChargePage({
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
           <Link href="/" className="flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-base font-black text-white shadow-md">
-              V
-            </span>
+            <VendixMark className="size-9 shadow-md shadow-slate-900/15" />
             <span className="leading-tight">
               <span className="block text-sm font-semibold">Vendix</span>
               <span className="block text-[10px] text-muted-foreground">Pagamento seguro</span>
