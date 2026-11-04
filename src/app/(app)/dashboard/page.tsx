@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { getDashboard } from "@/services/dashboard.service";
+import { getBillingConfig, listOpenTenantCharges } from "@/services/billing.service";
+import { listActiveNotices } from "@/services/saas.service";
+import { BillingNoticeBox } from "@/components/dashboard/billing-notice-box";
 import { formatBRL } from "@/lib/money";
 import { formatDateBR } from "@/lib/date";
 import { EmptyState, PageHeader, StatCard, TableShell } from "@/components/page-blocks";
@@ -29,7 +32,12 @@ export default async function DashboardPage({
 }) {
   const ctx = await requirePermission("dashboard.view");
   const params = await searchParams;
-  const data = await getDashboard(ctx, { from: params.from, to: params.to });
+  const [data, notices, openCharges, billingConfig] = await Promise.all([
+    getDashboard(ctx, { from: params.from, to: params.to }),
+    listActiveNotices(ctx.tenantId || null),
+    ctx.tenantId ? listOpenTenantCharges(ctx.tenantId) : Promise.resolve([]),
+    ctx.tenantId ? getBillingConfig() : Promise.resolve(null),
+  ]);
   const growth =
     data.previous.revenue > 0
       ? ((data.sales.revenue - data.previous.revenue) / data.previous.revenue) * 100
@@ -81,6 +89,19 @@ export default async function DashboardPage({
           </>
         }
       />
+
+      {billingConfig && (
+        <BillingNoticeBox
+          charges={openCharges}
+          config={billingConfig}
+          notices={notices.map((notice) => ({
+            id: notice.id,
+            title: notice.title,
+            message: notice.message,
+            level: notice.level,
+          }))}
+        />
+      )}
 
       {data.alerts.length > 0 && (
         <div className="mb-4 space-y-2">

@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/tenant";
 import { auditLog } from "@/services/audit.service";
@@ -29,7 +30,7 @@ export type BillingConfig = {
  * Configuração única de recebimento da plataforma. Quando ainda não foi
  * salva, devolve os padrões para que as telas funcionem sem seed manual.
  */
-export async function getBillingConfig(): Promise<BillingConfig> {
+export const getBillingConfig = cache(async (): Promise<BillingConfig> => {
   const config = await prisma.platformConfig.findUnique({ where: { id: "default" } });
   if (config) return config;
 
@@ -47,7 +48,7 @@ export async function getBillingConfig(): Promise<BillingConfig> {
     updatedAt: new Date(),
     updatedById: null,
   };
-}
+});
 
 export async function saveBillingConfig(ctx: AuthContext, raw: unknown): Promise<void> {
   assertPlatform(ctx);
@@ -169,6 +170,15 @@ export async function listTenantCharges(tenantId: string) {
     where: { tenantId },
     orderBy: [{ dueDate: "desc" }],
     take: 36,
+  });
+}
+
+/** Somente mensalidades em aberto, da mais urgente para a menos urgente. */
+export async function listOpenTenantCharges(tenantId: string) {
+  return prisma.tenantCharge.findMany({
+    where: { tenantId, status: { in: ["PENDENTE", "VENCIDA"] } },
+    orderBy: [{ status: "desc" }, { dueDate: "asc" }],
+    take: 24,
   });
 }
 

@@ -4,9 +4,10 @@ import { AlertTriangle } from "lucide-react";
 import { requireTenantAccess } from "@/lib/tenant";
 import { getCompany } from "@/services/settings.service";
 import { listPlans } from "@/services/saas.service";
-import { getBillingConfig, listTenantCharges } from "@/services/billing.service";
+import { getBillingConfig, listTenantCharges, pixForCharge } from "@/services/billing.service";
 import { formatBRL } from "@/lib/money";
 import { formatDateBR } from "@/lib/date";
+import { OpenChargeCard } from "@/components/billing/open-charge-card";
 import { PageHeader, StatCard, StatusBadge, TableShell, EmptyState } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
 
@@ -61,6 +62,27 @@ export default async function SubscriptionPage() {
             O bloqueio ocorre após {config.graceDays} dia(s) de carência.
           </p>
         </div>
+      )}
+
+      {openCharges.length > 0 && (
+        <section className="mt-6">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Pagamento das mensalidades em aberto</h2>
+            <p className="text-xs text-muted-foreground">
+              Copie a chave PIX ou baixe o boleto sem sair da assinatura.
+            </p>
+          </div>
+          <div className="space-y-3">
+            {openCharges.map((charge, index) => (
+              <OpenChargeCard
+                key={charge.id}
+                charge={charge}
+                pix={pixForCharge(charge, config)}
+                showQr={index === 0}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       <section className="mt-6 rounded-xl border bg-card p-4 shadow-sm">

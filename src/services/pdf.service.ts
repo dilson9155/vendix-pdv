@@ -1,5 +1,6 @@
 import "server-only";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
+import QRCode from "qrcode";
 import { formatDateTimeBR } from "@/lib/date";
 
 // ---------------------------------------------------------------------------
@@ -348,6 +349,254 @@ export async function buildReportPdf<T>(input: ReportPdfInput<T>): Promise<Uint8
 
 export function pdfFileName(prefix: string, from: string, to: string): string {
   return `${prefix}-${from}-a-${to}.pdf`;
+}
+
+export type ChargePdfInput = {
+  tenantName: string;
+  description: string;
+  referenceMonth: string;
+  amount: string;
+  dueDate: string;
+  status: string;
+  boletoCode?: string | null;
+  boletoUrl?: string | null;
+  pixKey?: string | null;
+  pixBeneficiary?: string | null;
+  pixPayload?: string | null;
+  instructions?: string | null;
+  paymentUrl: string;
+};
+
+/**
+ * PDF de cobrança da mensalidade. Quando a cobrança possui linha digitável o
+ * documento funciona como boleto; caso contrário reúne os dados de pagamento
+ * por PIX (QR Code, chave e copia e cola).
+ */
+export async function buildChargePdf(input: ChargePdfInput): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const mono = await doc.embedFont(StandardFonts.Courier);
+  const monoBold = await doc.embedFont(StandardFonts.CourierBold);
+
+  const pageWidth = 595.28;
+  const pageHeight = 841.89;
+  const contentWidth = pageWidth - MARGIN * 2;
+  const page = doc.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - MARGIN;
+
+  drawAligned(page, "VENDIX", {
+    x: MARGIN,
+    y: y - 16,
+    width: contentWidth * 0.7,
+    font: bold,
+    size: 18,
+  });
+  drawAligned(page, `Emitido em ${formatDateTimeBR(new Date())}`, {
+    x: MARGIN + contentWidth * 0.7,
+    y: y - 12,
+    width: contentWidth * 0.3,
+    font,
+    size: 8,
+    align: "right",
+    color: MUTED,
+  });
+  y -= 36;
+
+  drawAligned(page, input.boletoCode ? "Boleto de cobrança" : "Documento de cobrança", {
+    x: MARGIN,
+    y: y - 15,
+    width: contentWidth,
+    font: bold,
+    size: 15,
+  });
+  y -= 28;
+
+  page.drawRectangle({
+    x: MARGIN,
+    y: y - 102,
+    width: contentWidth,
+    height: 102,
+    color: HEADER_FILL,
+    borderColor: LINE,
+    borderWidth: 0.6,
+  });
+
+  const infoRows: Array<[string, string]> = [
+    ["Loja", input.tenantName],
+    ["Mensalidade", `${input.description} · ${input.referenceMonth}`],
+    ["Vencimento", input.dueDate],
+    ["Status", input.status],
+  ];
+  let infoY = y - 18;
+  for (const [label, value] of infoRows) {
+    drawAligned(page, label, {
+      x: MARGIN + 10,
+      y: infoY,
+      width: 90,
+      font,
+      size: 9,
+      color: MUTED,
+    });
+    drawAligned(page, value, {
+      x: MARGIN + 104,
+      y: infoY,
+      width: contentWidth - 114,
+      font: bold,
+      size: 9,
+    });
+    infoY -= 18;
+  }
+  drawAligned(page, "Valor", {
+    x: MARGIN + 10,
+    y: infoY,
+    width: 90,
+    font,
+    size: 9,
+    color: MUTED,
+  });
+  drawAligned(page, input.amount, {
+    x: MARGIN + 104,
+    y: infoY,
+    width: contentWidth - 114,
+    font: bold,
+    size: 13,
+  });
+  y -= 120;
+
+  if (input.boletoCode) {
+    drawAligned(page, "Linha digitável", {
+      x: MARGIN,
+      y,
+      width: contentWidth,
+      font: bold,
+      size: 10,
+    });
+    y -= 8;
+    page.drawRectangle({
+      x: MARGIN,
+      y: y - 34,
+      width: contentWidth,
+      height: 30,
+      color: TOTAL_FILL,
+      borderColor: LINE,
+      borderWidth: 0.6,
+    });
+    drawAligned(page, input.boletoCode, {
+      x: MARGIN + 8,
+      y: y - 23,
+      width: contentWidth - 16,
+      font: monoBold,
+      size: 9.5,
+    });
+    y -= 50;
+  }
+
+  if (input.pixPayload) {
+    const qrPng = await QRCode.toBuffer(input.pixPayload, {
+      type: "png",
+      margin: 1,
+      width: 220,
+      errorCorrectionLevel: "M",
+      color: { dark: "#0f172a", light: "#ffffff" },
+    });
+    const qr = await doc.embedPng(new Uint8Array(qrPng));
+    const qrSize = 118;
+
+    drawAligned(page, "Pagamento via PIX", {
+      x: MARGIN,
+      y,
+      width: contentWidth,
+      font: bold,
+      size: 10,
+    });
+    y -= 8;
+
+    const textWidth = contentWidth - qrSize - 20;
+    let textY = y - 10;
+    const lines: Array<[string, string]> = [
+      ["Chave PIX", input.pixKey ?? "—"],
+      ["Beneficiário", input.pixBeneficiary ?? "—"],
+    ];
+    for (const [label, value] of lines) {
+      drawAligned(page, label, {
+        x: MARGIN,
+        y: textY,
+        width: textWidth,
+        font,
+        size: 8,
+        color: MUTED,
+      });
+      textY -= 11;
+      for (const line of wrap(value, bold, 9, textWidth)) {
+        drawAligned(page, line, { x: MARGIN, y: textY, width: textWidth, font: bold, size: 9 });
+        textY -= 11;
+      }
+      textY -= 4;
+    }
+
+    drawAligned(page, "PIX copia e cola", {
+      x: MARGIN,
+      y: textY,
+      width: textWidth,
+      font,
+      size: 8,
+      color: MUTED,
+    });
+    textY -= 11;
+    for (const line of wrap(input.pixPayload, mono, 7, textWidth).slice(0, 8)) {
+      drawAligned(page, line, { x: MARGIN, y: textY, width: textWidth, font: mono, size: 7 });
+      textY -= 9;
+    }
+
+    page.drawImage(qr, {
+      x: pageWidth - MARGIN - qrSize,
+      y: y - qrSize - 6,
+      width: qrSize,
+      height: qrSize,
+    });
+    y -= Math.max(qrSize + 16, y - textY + 8);
+  }
+
+  if (input.instructions) {
+    drawAligned(page, "Instruções", {
+      x: MARGIN,
+      y,
+      width: contentWidth,
+      font: bold,
+      size: 10,
+    });
+    y -= 14;
+    for (const line of wrap(input.instructions, font, 9, contentWidth).slice(0, 14)) {
+      drawAligned(page, line, { x: MARGIN, y, width: contentWidth, font, size: 9, color: MUTED });
+      y -= 12;
+    }
+    y -= 6;
+  }
+
+  drawAligned(page, "Pague também pelo link:", {
+    x: MARGIN,
+    y,
+    width: contentWidth,
+    font: bold,
+    size: 9,
+  });
+  y -= 12;
+  for (const line of wrap(input.paymentUrl, mono, 8, contentWidth)) {
+    drawAligned(page, line, { x: MARGIN, y, width: contentWidth, font: mono, size: 8 });
+    y -= 10;
+  }
+
+  drawAligned(page, "Documento gerado pelo Vendix. Guarde o comprovante após o pagamento.", {
+    x: MARGIN,
+    y: MARGIN - 14,
+    width: contentWidth,
+    font,
+    size: 7.5,
+    color: MUTED,
+  });
+
+  return doc.save();
 }
 
 export function pdfResponse(bytes: Uint8Array, fileName: string): Response {

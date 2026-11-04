@@ -2,11 +2,17 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { NoticeDialog, type NoticeRow } from "@/components/admin/notice-dialog";
+import { NoticeDialog, type NoticeRow, type NoticeTargetOption } from "@/components/admin/notice-dialog";
 import { Button } from "@/components/ui/button";
 import { PageHeader, StatCard, StatusBadge, TableShell, EmptyState } from "@/components/page-blocks";
 
-export function NoticesManager({ notices }: { notices: NoticeRow[] }) {
+export function NoticesManager({
+  notices,
+  tenants,
+}: {
+  notices: NoticeRow[];
+  tenants: NoticeTargetOption[];
+}) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<NoticeRow | null>(null);
 
@@ -52,6 +58,7 @@ export function NoticesManager({ notices }: { notices: NoticeRow[] }) {
                   <th>Título</th>
                   <th>Nível</th>
                   <th>Mensagem</th>
+                  <th>Destinatários</th>
                   <th>Publicado</th>
                   <th>Expira em</th>
                   <th />
@@ -66,6 +73,19 @@ export function NoticesManager({ notices }: { notices: NoticeRow[] }) {
                     </td>
                     <td className="max-w-md">
                       <p className="line-clamp-2 text-xs">{notice.message}</p>
+                    </td>
+                    <td className="max-w-48">
+                      {notice.tenantIds.length === 0 ? (
+                        <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">
+                          Todas as lojas
+                        </span>
+                      ) : (
+                        <span className="line-clamp-2 text-xs" title={notice.tenantNames.join(", ")}>
+                          {notice.tenantNames.length > 0
+                            ? notice.tenantNames.join(", ")
+                            : `${notice.tenantIds.length} loja(s)`}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <StatusBadge status={notice.active ? "ATIVO" : "INATIVO"} />
@@ -84,7 +104,13 @@ export function NoticesManager({ notices }: { notices: NoticeRow[] }) {
         )}
       </section>
 
-      <NoticeDialog open={dialogOpen} onOpenChange={setDialogOpen} notice={editing} />
+      <NoticeDialog
+        key={`${editing?.id ?? "new"}-${dialogOpen}`}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        notice={editing}
+        tenants={tenants}
+      />
     </div>
   );
 }

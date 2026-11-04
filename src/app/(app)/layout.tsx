@@ -4,7 +4,7 @@ import { listActiveNotices } from "@/services/saas.service";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAppArea();
-  const notices = await listActiveNotices();
+  const notices = await listActiveNotices(ctx.tenantId || null);
 
   const groups: NavGroup[] = [];
   const push = (title: string, items: NavGroup["items"]) => {

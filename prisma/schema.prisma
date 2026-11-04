@@ -232,6 +232,8 @@ model PlatformNotice {
   message     String      @db.Text
   level       NoticeLevel @default(INFO)
   active      Boolean     @default(true)
+  /// Lojas destinatárias. Vazio = todas as lojas.
+  tenantIds   String[]    @default([])
   publishedAt DateTime    @default(now())
   expiresAt   DateTime?
   createdAt   DateTime    @default(now())

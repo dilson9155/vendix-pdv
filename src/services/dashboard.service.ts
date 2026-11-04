@@ -94,7 +94,7 @@ export async function getDashboard(
     createdAt: { gte: startOfBusinessDay(period.from), lte: endOfBusinessDay(period.to) },
   };
 
-  const [salesAgg, todayAgg, previous, returnsAgg, salesForDaily] = await Promise.all([
+  const [salesAgg, todayAgg, previous, returnsAgg, salesForDaily, paymentGroups, topItems, cash, finance, stock] = await Promise.all([
     prisma.sale.aggregate({ where: completed, _sum: { total: true, discount: true }, _count: true }),
     prisma.sale.aggregate({
       where: {
@@ -135,19 +135,6 @@ export async function getDashboard(
       orderBy: { createdAt: "asc" },
       take: 5000,
     }),
-  ]);
-
-  const dailyMap = new Map<string, { revenue: number; count: number }>();
-  for (const sale of salesForDaily) {
-    const date = sale.createdAt.toISOString().slice(0, 10);
-    const current = dailyMap.get(date) ?? { revenue: 0, count: 0 };
-    current.revenue = round2(current.revenue + toNumber(sale.total)).toNumber();
-    current.count += 1;
-    dailyMap.set(date, current);
-  }
-  const dailySales = [...dailyMap.entries()].map(([date, values]) => ({ date, ...values }));
-
-  const [paymentGroups, topItems, cash, finance, stock] = await Promise.all([
     prisma.salePayment.groupBy({
       by: ["methodKind"],
       where: {
@@ -176,6 +163,16 @@ export async function getDashboard(
     hasPermission(ctx, "finance.view") ? getFinanceBlock(ctx, branchId) : Promise.resolve(null),
     hasPermission(ctx, "stock.view") ? getStockBlock(ctx, branchId) : Promise.resolve(null),
   ]);
+
+  const dailyMap = new Map<string, { revenue: number; count: number }>();
+  for (const sale of salesForDaily) {
+    const date = sale.createdAt.toISOString().slice(0, 10);
+    const current = dailyMap.get(date) ?? { revenue: 0, count: 0 };
+    current.revenue = round2(current.revenue + toNumber(sale.total)).toNumber();
+    current.count += 1;
+    dailyMap.set(date, current);
+  }
+  const dailySales = [...dailyMap.entries()].map(([date, values]) => ({ date, ...values }));
 
   const paymentTotal = paymentGroups.reduce((acc, row) => acc + toNumber(row._sum.amount), 0);
   const paymentMix = paymentGroups

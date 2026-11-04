@@ -1,5 +1,6 @@
 import "server-only";
 import bcrypt from "bcryptjs";
+import { cache } from "react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/tenant";
@@ -120,34 +121,35 @@ export async function getTenant(ctx: AuthContext, tenantId: string) {
 export async function getPlatformOverview(ctx: AuthContext) {
   assertPlatform(ctx);
   const today = new Date();
-  const [tenants, activeTenants, trialTenants, plans, charges, recent] = await Promise.all([
-    prisma.tenant.count(),
-    prisma.tenant.count({ where: { status: "ATIVO" } }),
-    prisma.tenant.count({ where: { subscription: { status: "TRIAL" } } }),
-    prisma.plan.findMany({ where: { active: true }, orderBy: { price: "asc" } }),
-    prisma.tenantCharge.findMany({
-      where: { status: { in: ["PENDENTE", "VENCIDA"] } },
-      select: { amount: true, dueDate: true, status: true },
-    }),
-    prisma.tenant.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 8,
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        createdAt: true,
-        plan: { select: { name: true } },
-        subscription: { select: { status: true } },
-      },
-    }),
-  ]);
+  const [tenants, activeTenants, trialTenants, plans, charges, recent, activeSubscriptions] =
+    await Promise.all([
+      prisma.tenant.count(),
+      prisma.tenant.count({ where: { status: "ATIVO" } }),
+      prisma.tenant.count({ where: { subscription: { status: "TRIAL" } } }),
+      prisma.plan.findMany({ where: { active: true }, orderBy: { price: "asc" } }),
+      prisma.tenantCharge.findMany({
+        where: { status: { in: ["PENDENTE", "VENCIDA"] } },
+        select: { amount: true, dueDate: true, status: true },
+      }),
+      prisma.tenant.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 8,
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          createdAt: true,
+          plan: { select: { name: true } },
+          subscription: { select: { status: true } },
+        },
+      }),
+      prisma.subscription.findMany({
+        where: { status: "ATIVA" },
+        select: { plan: { select: { price: true } } },
+      }),
+    ]);
 
   let mrr = dec(0);
-  const activeSubscriptions = await prisma.subscription.findMany({
-    where: { status: "ATIVA" },
-    select: { plan: { select: { price: true } } },
-  });
   for (const sub of activeSubscriptions) mrr = mrr.plus(sub.plan.price);
 
   let overdue = dec(0);
@@ -665,7 +667,26 @@ export async function cancelCharge(ctx: AuthContext, chargeId: string) {
 
 export async function listNotices(ctx: AuthContext) {
   assertPlatform(ctx);
-  return prisma.platformNotice.findMany({ orderBy: [{ active: "desc" }, { publishedAt: "desc" }] });
+  const [notices, tenants] = await Promise.all([
+    prisma.platformNotice.findMany({ orderBy: [{ active: "desc" }, { publishedAt: "desc" }] }),
+    prisma.tenant.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  const names = new Map(tenants.map((tenant) => [tenant.id, tenant.name]));
+  return notices.map((notice) => ({
+    ...notice,
+    tenantNames: notice.tenantIds
+      .map((id) => names.get(id))
+      .filter((name): name is string => Boolean(name)),
+  }));
+}
+
+/** Lojas disponíveis para direcionar avisos. */
+export async function listTenantOptions(ctx: AuthContext) {
+  assertPlatform(ctx);
+  return prisma.tenant.findMany({
+    orderBy: [{ status: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, status: true },
+  });
 }
 
 export const noticeSchema = z.object({
@@ -675,16 +696,38 @@ export const noticeSchema = z.object({
   level: z.enum(["INFO", "ALERTA", "URGENTE"]).default("INFO"),
   active: z.boolean().default(true),
   expiresAt: z.string().optional(),
+  tenantIds: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .transform((value) =>
+      (Array.isArray(value) ? value : value ? [value] : [])
+        .map((id) => id.trim())
+        .filter(Boolean)
+    )
+    .pipe(z.array(z.string()).max(500)),
 });
 
 export async function saveNotice(ctx: AuthContext, raw: unknown) {
   assertPlatform(ctx);
   const input = noticeSchema.parse(raw);
+
+  const selectedIds = [...new Set(input.tenantIds)];
+  if (selectedIds.length) {
+    const found = await prisma.tenant.findMany({
+      where: { id: { in: selectedIds } },
+      select: { id: true },
+    });
+    if (found.length !== selectedIds.length) {
+      throw new Error("Uma ou mais lojas selecionadas não foram encontradas.");
+    }
+  }
+
   const data = {
     title: input.title,
     message: input.message,
     level: input.level,
     active: input.active,
+    tenantIds: selectedIds,
     expiresAt: input.expiresAt
       ? new Date(`${input.expiresAt}T23:59:59-03:00`)
       : null,
@@ -699,7 +742,9 @@ export async function saveNotice(ctx: AuthContext, raw: unknown) {
     module: "plataforma",
     entity: "PlatformNotice",
     entityId: saved.id,
-    description: `Aviso "${saved.title}" ${input.id ? "atualizado" : "criado"}`,
+    description: `Aviso "${saved.title}" ${input.id ? "atualizado" : "criado"}${
+      selectedIds.length ? ` para ${selectedIds.length} loja(s)` : " para todas as lojas"
+    }`,
   });
   return { id: saved.id };
 }
@@ -716,18 +761,24 @@ export async function listPlatformAudit(ctx: AuthContext, limit = 100) {
   });
 }
 
-export async function listActiveNotices() {
+export const listActiveNotices = cache(async (tenantId?: string | null) => {
   const now = new Date();
+  const target = tenantId?.trim() || null;
   return prisma.platformNotice.findMany({
     where: {
       active: true,
       publishedAt: { lte: now },
-      OR: [{ expiresAt: null }, { expiresAt: { gte: now } }],
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
+        ...(target
+          ? [{ OR: [{ tenantIds: { isEmpty: true } }, { tenantIds: { has: target } }] }]
+          : []),
+      ],
     },
     orderBy: [{ level: "desc" }, { publishedAt: "desc" }],
     take: 5,
   });
-}
+});
 
 export async function platformChargeDefaults() {
   const tenants = await prisma.tenant.findMany({

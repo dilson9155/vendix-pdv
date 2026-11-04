@@ -72,7 +72,15 @@ export function parseFormData(form: FormData, booleanFields: string[] = []) {
   for (const [key, value] of form.entries()) {
     if (typeof value !== "string") continue;
     if (value.trim() === "") continue;
-    raw[key] = value;
+    const current = raw[key];
+    if (current === undefined) {
+      raw[key] = value;
+    } else if (Array.isArray(current)) {
+      current.push(value);
+    } else {
+      // Campos repetidos (ex.: checkboxes de lojas) viram uma lista.
+      raw[key] = [current, value];
+    }
   }
   for (const field of booleanFields) raw[field] = form.has(field);
   return raw;
