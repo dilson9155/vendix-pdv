@@ -187,6 +187,86 @@ export function InlineAction({
   className?: string;
   onDone?: (data: unknown) => void;
 }) {
+  return (
+    <InlineActionBase
+      action={action}
+      label={label}
+      pendingLabel={pendingLabel}
+      confirmMessage={confirmMessage}
+      variant={variant}
+      size={size}
+      icon={icon}
+      className={className}
+      onDone={onDone}
+    />
+  );
+}
+
+/**
+ * Versão para Server Components: recebe a referência da Server Action e os
+ * argumentos separadamente. Funções não podem atravessar a fronteira
+ * servidor → cliente, mas referências de Server Actions e dados serializáveis
+ * podem.
+ */
+export function InlineServerAction<T>({
+  action,
+  payload,
+  label,
+  pendingLabel,
+  confirmMessage,
+  variant = "outline",
+  size = "sm",
+  icon,
+  className,
+  onDone,
+}: {
+  action: (payload: T) => Promise<ActionResult<unknown>>;
+  payload?: T;
+  label: string;
+  pendingLabel?: string;
+  confirmMessage?: string;
+  variant?: "default" | "outline" | "destructive" | "secondary" | "ghost";
+  size?: "default" | "sm" | "icon" | "icon-sm" | "lg";
+  icon?: ReactNode;
+  className?: string;
+  onDone?: (data: unknown) => void;
+}) {
+  return (
+    <InlineActionBase
+      action={() => action(payload as T)}
+      label={label}
+      pendingLabel={pendingLabel}
+      confirmMessage={confirmMessage}
+      variant={variant}
+      size={size}
+      icon={icon}
+      className={className}
+      onDone={onDone}
+    />
+  );
+}
+
+function InlineActionBase({
+  action,
+  label,
+  pendingLabel,
+  confirmMessage,
+  variant = "outline",
+  size = "sm",
+  icon,
+  className,
+  onDone,
+}: {
+  action: () => Promise<ActionResult<unknown>>;
+  label: string;
+  pendingLabel?: string;
+  confirmMessage?: string;
+  variant?: "default" | "outline" | "destructive" | "secondary" | "ghost";
+  size?: "default" | "sm" | "icon" | "icon-sm" | "lg";
+  icon?: ReactNode;
+  className?: string;
+  onDone?: (data: unknown) => void;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 

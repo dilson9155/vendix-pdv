@@ -161,6 +161,10 @@ export type ProvisionInput = {
   document?: string | null;
   email?: string | null;
   phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
   planId?: string | null;
   trialDays?: number;
   adminName: string;
@@ -185,6 +189,10 @@ export async function provisionTenant(input: ProvisionInput): Promise<{ tenantId
         document: input.document ?? null,
         email: input.email ?? null,
         phone: input.phone ?? null,
+        address: input.address ?? null,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        zipCode: input.zipCode ?? null,
         planId: input.planId ?? null,
         notes: input.notes ?? null,
         trialEndsAt:

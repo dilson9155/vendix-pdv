@@ -39,6 +39,14 @@ enum ChargeStatus {
   CANCELADA
 }
 
+/** Forma de pagamento aceita nas mensalidades da plataforma. */
+enum ChargeMethod {
+  PIX
+  BOLETO
+  TRANSFERENCIA
+  OUTRO
+}
+
 model Plan {
   id          String   @id @default(cuid())
   code        String   @unique
@@ -156,13 +164,60 @@ model TenantCharge {
   dueDate        DateTime
   status         ChargeStatus @default(PENDENTE)
   paidAt         DateTime?
+  paidById       String?
   notes          String?     @db.Text
+
+  // --- Pagamento (PIX / boleto) -------------------------------------------
+  /// Token público usado no link de pagamento enviado à loja.
+  publicToken    String      @unique @default(cuid())
+  method         ChargeMethod @default(PIX)
+  /// Cópia da chave PIX da plataforma no momento da emissão (rastreabilidade).
+  pixKey         String?
+  pixBeneficiary String?
+  pixCity        String?
+  /// Linha digitável / código de barras do boleto.
+  boletoCode     String?     @db.Text
+  /// Link do boleto (PDF do banco) quando houver.
+  boletoUrl      String?     @db.Text
+  instructions   String?     @db.Text
+  paymentUrl     String?     @db.Text
+
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
   @@index([tenantId, referenceMonth])
   @@index([status, dueDate])
+  @@index([tenantId, status])
   @@map("tenant_charges")
+}
+
+/**
+ * Configuração única da plataforma (linha "default"): dados de recebimento
+ * das mensalidades — chave PIX, instruções de boleto e regras de bloqueio.
+ */
+model PlatformConfig {
+  id                 String   @id @default("default")
+  /// Chave PIX que recebe as mensalidades (CPF/CNPJ/e-mail/telefone/aleatória).
+  pixKey             String?
+  pixKeyType         String?
+  /// Nome do beneficiário exibido no QR Code (máx. 25 caracteres no BR Code).
+  pixBeneficiary     String?
+  /// Cidade do beneficiário (máx. 15 caracteres no BR Code).
+  pixCity            String?
+  /// Texto que acompanha o boleto/instruções de pagamento.
+  boletoInstructions String?  @db.Text
+  /// WhatsApp de suporte que a loja usa para enviar o comprovante.
+  supportWhatsapp    String?
+  /// Dia de vencimento padrão das mensalidades.
+  billingDueDay      Int      @default(10)
+  /// Dias de tolerância após o vencimento antes de suspender a loja.
+  graceDays          Int      @default(5)
+  /// Suspende automaticamente lojas com mensalidade vencida além da carência.
+  autoSuspend        Boolean  @default(false)
+  updatedAt          DateTime @updatedAt
+  updatedById        String?
+
+  @@map("platform_config")
 }
 
 enum NoticeLevel {

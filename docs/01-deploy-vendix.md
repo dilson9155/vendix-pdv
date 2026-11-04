@@ -28,9 +28,31 @@ npx prisma db seed
 | `WHATSAPP_API_VERSION` / `WHATSAPP_PHONE_NUMBER_ID` / `WHATSAPP_ACCESS_TOKEN` | Credenciais Cloud API (opcionais). |
 | `RESEND_API_KEY` / `EMAIL_FROM` | E-mail transacional (opcional). |
 | `PASSWORD_RESET_DEV_LINK` | `false` em produção. |
+| `CRON_SECRET` | Segredo enviado pelo cron da Vercel em `Authorization: Bearer`. |
 
-3. Build: `npm run build` · Output padrão Next.js.
+3. Build: `npm run build` · Output padrão Next.js. O comando
+   `vercel-build` roda `prisma migrate deploy` antes do build.
 4. Domínio customizado + HTTPS automático.
+5. Cron: `vercel.json` agenda `/api/cron/billing` diariamente às 08:00 UTC.
+   Proteja o endpoint definindo `CRON_SECRET` na Vercel.
+
+## Gestão de lojas e cobrança (SaaS)
+
+1. Acesse `/admin/financeiro` e cadastre a **chave PIX** (CPF/CNPJ, e-mail,
+   telefone ou aleatória), o beneficiário, a cidade, o dia de vencimento e a
+   carência.
+2. Em `/admin/empresas/nova`, cadastre a loja. O provisionamento cria matriz,
+   perfis, usuário administrador, plano de contas, caixa e formas de pagamento.
+3. Em `/admin/cobrancas/nova`, emita a mensalidade. Para PIX o QR Code e o
+   copia e cola saem prontos; para boleto informe a linha digitável e/ou o PDF.
+4. Copie o **link público** da cobrança (`/pagamento/[token]`) e envie à loja.
+   O link funciona sem login e exibe PIX, boleto e instruções.
+5. Ao confirmar o recebimento (“Marcar como paga”), a loja suspensa é reativada
+   quando não restam outras cobranças em aberto.
+
+> O Vendix gera o BR Code PIX localmente e não registra boleto em banco. Para
+> boleto registrado, emita no seu internet banking e cole a linha digitável/PDF
+> na cobrança. A baixa é manual (comprovante + “Marcar como paga”).
 
 ## Variáveis opcionais por tenant
 
@@ -52,6 +74,11 @@ npx prisma db seed
   transferências entre contas, fluxo de caixa (realizado + projeção), lançamentos manuais.
 - **DRE**: receita bruta − deduções = receita líquida; CMV por custo real; despesas por
   competência (contas a pagar) + lançamentos manuais.
+- **Cobrança SaaS**: PIX BR Code (EMV/CRC16) com QR Code SVG e copia e cola,
+  boleto manual, link público tokenizado, suspensão/reativação automática e
+  cron diário protegido por `CRON_SECRET`.
+- **PWA**: instalável em desktop e celular; prompt nativo (`beforeinstallprompt`)
+  com instruções para iOS e navegadores sem suporte; service worker só em produção.
 
 ## Segurança e conformidade (LGPD)
 

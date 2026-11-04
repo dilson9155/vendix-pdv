@@ -360,6 +360,10 @@ export const tenantSchema = z.object({
   document: documentSchema,
   email: optionalEmail,
   phone: phoneSchema,
+  address: z.string().trim().max(300).optional(),
+  city: z.string().trim().max(80).optional(),
+  state: z.string().trim().max(2).optional(),
+  zipCode: z.string().trim().max(9).optional(),
   planId: idSchema,
   adminName: requiredText("Responsável", 120),
   adminEmail: emailSchema,
@@ -367,13 +371,71 @@ export const tenantSchema = z.object({
   trialDays: z.coerce.number().int().min(0).max(90).default(14),
 });
 
-export const platformChargeSchema = z.object({
-  tenantId: idSchema,
+export const tenantUpdateSchema = z.object({
+  id: idSchema,
+  name: requiredText("Nome", 120),
+  legalName: z.string().trim().max(160).optional(),
+  document: documentSchema,
+  email: optionalEmail,
+  phone: phoneSchema,
+  address: z.string().trim().max(300).optional(),
+  city: z.string().trim().max(80).optional(),
+  state: z.string().trim().max(2).optional(),
+  zipCode: z.string().trim().max(9).optional(),
+  planId: idSchema,
+  status: z.enum(["ATIVO", "SUSPENSO", "CANCELADO"]),
+  trialEndsAt: optionalDateInput,
+  notes: z.string().trim().max(4000).optional(),
+});
+
+export const chargePaymentFieldsSchema = z.object({
+  method: z.enum(["PIX", "BOLETO", "TRANSFERENCIA", "OUTRO"]).default("PIX"),
+  boletoCode: z.string().trim().max(2000).optional(),
+  boletoUrl: z.string().trim().url("Informe uma URL válida.").optional().or(z.literal("")),
+  paymentUrl: z.string().trim().url("Informe uma URL válida.").optional().or(z.literal("")),
+  instructions: z.string().trim().max(2000).optional(),
+});
+
+export const platformChargeSchema = chargePaymentFieldsSchema
+  .extend({
+    tenantId: idSchema,
+    description: requiredText("Descrição", 160),
+    referenceMonth: z.string().regex(/^\d{4}-\d{2}$/, "Mês inválido."),
+    amount: positiveMoneyInput,
+    dueDate: dateInput,
+    notes: z.string().trim().max(300).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.method === "BOLETO" && !value.boletoCode && !value.boletoUrl) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["boletoCode"],
+        message: "Informe a linha digitável ou o link do boleto.",
+      });
+    }
+  });
+
+export const chargeUpdateSchema = chargePaymentFieldsSchema.extend({
+  id: idSchema,
   description: requiredText("Descrição", 160),
-  referenceMonth: z.string().regex(/^\d{4}-\d{2}$/, "Mês inválido."),
   amount: positiveMoneyInput,
   dueDate: dateInput,
   notes: z.string().trim().max(300).optional(),
+});
+
+export const platformConfigSchema = z.object({
+  pixKey: z.string().trim().max(120).optional(),
+  pixKeyType: z.preprocess(
+    (value) => (value === "" ? undefined : value),
+    z.enum(["CPF", "CNPJ", "EMAIL", "TELEFONE", "ALEATORIA"]).optional()
+  ),
+  pixBeneficiary: z.string().trim().max(60).optional(),
+  pixCity: z.string().trim().max(40).optional(),
+  boletoInstructions: z.string().trim().max(2000).optional(),
+  supportWhatsapp: z.string().trim().max(20).optional(),
+  billingDueDay: z.coerce.number().int().min(1).max(28).default(10),
+  graceDays: z.coerce.number().int().min(0).max(120).default(5),
+  autoSuspend: z.boolean().default(false),
 });
 
 export type CustomerInput = z.infer<typeof customerSchema>;

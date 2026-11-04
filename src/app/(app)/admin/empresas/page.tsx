@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Plus, Search } from "lucide-react";
+import { ArrowRight, Plus, Receipt, Search } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/tenant";
 import { listTenants } from "@/services/saas.service";
 import { formatDateBR } from "@/lib/date";
-import { InlineAction } from "@/components/forms/form-kit";
+import { InlineServerAction } from "@/components/forms/form-kit";
 import { setTenantStatusAction } from "@/app/actions/saas.actions";
 import { StatusBadge, TableShell, EmptyState, PageHeader, StatCard } from "@/components/page-blocks";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "Empresas" };
+export const metadata: Metadata = { title: "Lojas" };
 export const dynamic = "force-dynamic";
 
 const STATUS_OPTIONS = [
@@ -27,7 +27,10 @@ export default async function AdminTenantsPage({
   const ctx = await requirePlatformAdmin();
   const params = await searchParams;
   const page = Number(params.page ?? 1) || 1;
-  const status = params.status === "ATIVO" || params.status === "SUSPENSO" || params.status === "CANCELADO" ? params.status : undefined;
+  const status =
+    params.status === "ATIVO" || params.status === "SUSPENSO" || params.status === "CANCELADO"
+      ? params.status
+      : undefined;
 
   const { rows, total, pages } = await listTenants(ctx, { q: params.q, status, page });
 
@@ -43,27 +46,36 @@ export default async function AdminTenantsPage({
   };
 
   const activeCount = rows.filter((tenant) => tenant.status === "ATIVO").length;
+  const suspendedCount = rows.filter((tenant) => tenant.status === "SUSPENSO").length;
+  const canceledCount = rows.filter((tenant) => tenant.status === "CANCELADO").length;
 
   return (
     <div>
       <PageHeader
         eyebrow="Plataforma"
-        title="Empresas"
-        description="Tenants ativos, trials e empresas suspensas/canceladas da plataforma Vendix."
+        title="Lojas"
+        description="Cadastre, edite, suspenda por inadimplência e exclua as lojas da plataforma Vendix."
         actions={
-          <Button asChild size="sm">
-            <Link href="/admin">
-              <Plus className="size-4" /> Voltar ao painel
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href="/admin/cobrancas">
+                <Receipt className="size-4" /> Cobranças
+              </Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href="/admin/empresas/nova">
+                <Plus className="size-4" /> Nova loja
+              </Link>
+            </Button>
+          </div>
         }
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Empresas listadas" value={String(rows.length)} />
+        <StatCard label="Lojas listadas" value={String(rows.length)} hint={`${total} no total`} />
         <StatCard label="Ativas" value={String(activeCount)} tone="positive" />
-        <StatCard label="Suspensoas" value={String(rows.filter((tenant) => tenant.status === "SUSPENSO").length)} tone="warning" />
-        <StatCard label="Canceladas" value={String(rows.filter((tenant) => tenant.status === "CANCELADO").length)} tone="danger" />
+        <StatCard label="Suspensas" value={String(suspendedCount)} tone="warning" />
+        <StatCard label="Canceladas" value={String(canceledCount)} tone="danger" />
       </div>
 
       <form method="get" className="mt-4 grid gap-2 rounded-xl border bg-card p-3 shadow-sm sm:grid-cols-2 xl:grid-cols-7">
@@ -74,10 +86,15 @@ export default async function AdminTenantsPage({
             defaultValue={params.q}
             placeholder="Nome, documento ou e-mail"
             className="h-9 w-full rounded-lg border bg-background pl-8 pr-2 text-sm"
-            aria-label="Buscar empresa"
+            aria-label="Buscar loja"
           />
         </div>
-        <select name="status" defaultValue={params.status ?? ""} className="h-9 rounded-lg border bg-background px-2 text-sm" aria-label="Situação">
+        <select
+          name="status"
+          defaultValue={params.status ?? ""}
+          className="h-9 rounded-lg border bg-background px-2 text-sm"
+          aria-label="Situação"
+        >
           {STATUS_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -93,30 +110,44 @@ export default async function AdminTenantsPage({
 
       <div className="mt-4">
         {rows.length === 0 ? (
-          <EmptyState title="Nenhuma empresa encontrada" description="Ajuste os filtros ou provisione uma nova empresa." />
+          <EmptyState
+            title="Nenhuma loja encontrada"
+            description="Ajuste os filtros ou cadastre a primeira loja da plataforma."
+            action={
+              <Button asChild size="sm">
+                <Link href="/admin/empresas/nova">
+                  <Plus className="size-4" /> Cadastrar loja
+                </Link>
+              </Button>
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
-            <TableShell caption="Empresas">
+            <TableShell caption="Lojas">
               <thead>
                 <tr>
-                  <th>Nome</th>
+                  <th>Loja</th>
                   <th>Documento</th>
                   <th>Contato</th>
                   <th>Plano</th>
                   <th>Assinatura</th>
                   <th>Status</th>
                   <th>Cadastrada</th>
-                  <th />
+                  <th>Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((tenant) => (
                   <tr key={tenant.id}>
-                    <td className="font-medium">{tenant.name}</td>
-                    <td>{tenant.document}</td>
+                    <td className="font-medium">
+                      <Link href={`/admin/empresas/${tenant.id}`} className="hover:text-primary hover:underline">
+                        {tenant.name}
+                      </Link>
+                    </td>
+                    <td>{tenant.document ?? "—"}</td>
                     <td>
-                      <div>{tenant.email}</div>
-                      <div className="text-xs text-muted-foreground">{tenant.phone}</div>
+                      <div>{tenant.email ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">{tenant.phone ?? ""}</div>
                     </td>
                     <td>{tenant.plan?.name ?? "—"}</td>
                     <td>{tenant.subscription?.status ?? "TRIAL"}</td>
@@ -125,37 +156,31 @@ export default async function AdminTenantsPage({
                     </td>
                     <td>{formatDateBR(tenant.createdAt)}</td>
                     <td>
-                      <div className="flex gap-2">
-                        {tenant.status !== "ATIVO" && (
-                          <InlineAction
-                            action={async () => {
-                              const result = await setTenantStatusAction({ tenantId: tenant.id, status: "ATIVO" });
-                              return result;
-                            }}
-                            label="Ativar"
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/admin/empresas/${tenant.id}`}>
+                            Gerenciar <ArrowRight className="size-3.5" />
+                          </Link>
+                        </Button>
+                        {tenant.status !== "ATIVO" ? (
+                          <InlineServerAction
+                            action={setTenantStatusAction}
+                            payload={{ tenantId: tenant.id, status: "ATIVO" }}
+                            label="Reativar"
                             variant="secondary"
-                            confirmMessage="Ativar esta empresa?"
+                            confirmMessage="Reativar o acesso desta loja?"
                           />
-                        )}
-                        {tenant.status !== "SUSPENSO" && (
-                          <InlineAction
-                            action={async () => {
-                              const result = await setTenantStatusAction({ tenantId: tenant.id, status: "SUSPENSO" });
-                              return result;
+                        ) : (
+                          <InlineServerAction
+                            action={setTenantStatusAction}
+                            payload={{
+                              tenantId: tenant.id,
+                              status: "SUSPENSO",
+                              reason: "Inadimplência",
                             }}
                             label="Suspender"
-                            confirmMessage="Suspender esta empresa?"
-                          />
-                        )}
-                        {tenant.status !== "CANCELADO" && (
-                          <InlineAction
-                            action={async () => {
-                              const result = await setTenantStatusAction({ tenantId: tenant.id, status: "CANCELADO" });
-                              return result;
-                            }}
-                            label="Cancelar"
                             variant="destructive"
-                            confirmMessage="Cancelar esta empresa?"
+                            confirmMessage="Suspender esta loja por falta de pagamento? O acesso será bloqueado."
                           />
                         )}
                       </div>
@@ -168,7 +193,7 @@ export default async function AdminTenantsPage({
         )}
         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            Página {page} de {pages} · {total} empresa(s)
+            Página {page} de {pages} · {total} loja(s)
           </span>
           <div className="flex gap-2">
             {page > 1 && (

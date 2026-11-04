@@ -27,8 +27,26 @@ cosméticos e acessórios: PDV, estoque, vendas, financeiro, DRE e relatórios.
 | Relatórios | `/relatorios/vendas`, `/relatorios/estoque`, `/relatorios/financeiro`, `/relatorios/dre` | ✅ + export CSV em `/api/export/*` |
 | Usuários | `/usuarios` | ✅ perfis, ativação |
 | Configurações | `/configuracoes` | ✅ empresa, unidades, WhatsApp |
-| Assinatura | `/assinatura` | ✅ planos e limites |
-| Admin SaaS | `/admin` (+ sub-rotas) | ✅ tenants, planos, cobranças, avisos, auditoria |
+| Assinatura | `/assinatura` | ✅ plano, limites, mensalidades e link de pagamento |
+| Admin SaaS | `/admin` (+ sub-rotas) | ✅ lojas (CRUD + suspensão), planos, cobranças com PIX/boleto, recebimentos, avisos, auditoria |
+| Pagamento público | `/pagamento/[token]` | ✅ PIX (QR Code + copia e cola) e boleto sem login |
+
+## Gestão de lojas e cobrança
+
+- **Lojas** (`/admin/empresas`): cadastro com provisionamento completo (matriz,
+  perfis, usuário admin, plano de contas, caixa e formas de pagamento), edição,
+  suspensão por inadimplência, cancelamento e **exclusão definitiva** com
+  confirmação pelo nome.
+- **Recebimentos** (`/admin/financeiro`): chave PIX, beneficiário/cidade, dia
+  padrão de vencimento, carência e instruções de boleto. O BR Code é gerado no
+  servidor (CRC16) e o QR Code é renderizado em SVG.
+- **Cobranças** (`/admin/cobrancas`): mensalidades com PIX automático, boleto
+  (linha digitável + PDF), link público exclusivo e lembrete por WhatsApp.
+- **Régua de cobrança**: cron diário em `/api/cron/billing` marca vencidas e,
+  com a suspensão automática ligada, bloqueia lojas após a carência. Ao quitar
+  a última cobrança em aberto, a loja volta a operar automaticamente.
+- **PWA**: instalação pelo botão “Instalar app” (prompt nativo + passo a passo
+  para iOS/desktop), service worker apenas em produção.
 
 ## Regras de negócio críticas
 

@@ -66,6 +66,10 @@ const ICONS = {
   audit: ShieldCheck,
   subscription: CreditCard,
   admin: Store,
+  store: Store,
+  receipt: Receipt,
+  credit: CreditCard,
+  bell: Bell,
 };
 
 export type ShellNotice = {
@@ -215,6 +219,15 @@ export function AppShell({
     <div className="border-t border-sidebar-border p-3">
       <p className="truncate text-xs font-semibold text-sidebar-foreground">{userName}</p>
       <p className="truncate text-[11px] text-sidebar-foreground/55">{userEmail}</p>
+      <div className="mt-2">
+        <InstallAppButton
+          fullWidth
+          size="sm"
+          variant="ghost"
+          label="Instalar aplicativo"
+          className="justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        />
+      </div>
       <form action={logoutAction} className="mt-2">
         <Button
           type="submit"

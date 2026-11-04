@@ -8,10 +8,13 @@ import { provisionTenant } from "@/services/provisioning.service";
 import { dec, money, toNumber } from "@/lib/money";
 import { endOfBusinessDay, startOfBusinessDay, todayISO } from "@/lib/date";
 import {
+  chargeUpdateSchema,
   planSchema,
   platformChargeSchema,
   tenantSchema,
+  tenantUpdateSchema,
 } from "@/lib/validation";
+import { getBillingConfig } from "@/services/billing.service";
 import { z } from "zod";
 
 function assertPlatform(ctx: AuthContext): void {
@@ -107,7 +110,7 @@ export async function getTenant(ctx: AuthContext, tenantId: string) {
       subscription: { include: { plan: true } },
       branches: { orderBy: { name: "asc" } },
       charges: { orderBy: { dueDate: "desc" }, take: 12 },
-      _count: { select: { users: true, products: true, sales: true } },
+      _count: { select: { users: true, branches: true, products: true, sales: true } },
     },
   });
   if (!tenant) throw new Error("Empresa não encontrada.");
@@ -180,6 +183,10 @@ export async function createTenant(ctx: AuthContext, raw: unknown) {
     document: input.document,
     email: input.email,
     phone: input.phone,
+    address: input.address,
+    city: input.city,
+    state: input.state,
+    zipCode: input.zipCode,
     planId: plan.id,
     trialDays: input.trialDays,
     adminName: input.adminName,
@@ -199,6 +206,180 @@ export async function createTenant(ctx: AuthContext, raw: unknown) {
   });
   return result;
 }
+
+export async function updateTenant(ctx: AuthContext, raw: unknown) {
+  assertPlatform(ctx);
+  const input = tenantUpdateSchema.parse(raw);
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: input.id },
+    include: { subscription: true },
+  });
+  if (!tenant) throw new Error("Loja não encontrada.");
+
+  const plan = await prisma.plan.findUnique({ where: { id: input.planId } });
+  if (!plan || !plan.active) throw new Error("Plano inválido ou inativo.");
+
+  const trialEndsAt = input.trialEndsAt
+    ? new Date(`${input.trialEndsAt}T12:00:00-03:00`)
+    : tenant.trialEndsAt;
+
+  let subscriptionStatus = tenant.subscription?.status ?? "TRIAL";
+  if (input.status === "SUSPENSO") subscriptionStatus = "SUSPENSA";
+  else if (input.status === "CANCELADO") subscriptionStatus = "CANCELADA";
+  else if (subscriptionStatus === "SUSPENSA" || subscriptionStatus === "VENCIDA") {
+    subscriptionStatus = "ATIVA";
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.tenant.update({
+      where: { id: tenant.id },
+      data: {
+        name: input.name,
+        legalName: input.legalName ?? null,
+        document: input.document ?? null,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        address: input.address ?? null,
+        city: input.city ?? null,
+        state: input.state ?? null,
+        zipCode: input.zipCode ?? null,
+        planId: plan.id,
+        status: input.status,
+        trialEndsAt,
+        notes: input.notes ?? null,
+      },
+    });
+
+    if (tenant.subscription) {
+      await tx.subscription.update({
+        where: { tenantId: tenant.id },
+        data: {
+          planId: plan.id,
+          trialEndsAt,
+          status: subscriptionStatus,
+          ...(input.status === "CANCELADO"
+            ? { canceledAt: new Date(), canceledReason: "Cancelada pelo painel da plataforma." }
+            : {}),
+        },
+      });
+    } else {
+      await tx.subscription.create({
+        data: {
+          tenantId: tenant.id,
+          planId: plan.id,
+          status: subscriptionStatus,
+          trialEndsAt,
+          startedAt: new Date(),
+        },
+      });
+    }
+  });
+
+  await auditLog({
+    userId: ctx.userId,
+    tenantId: null,
+    action: "UPDATE",
+    module: "plataforma",
+    entity: "Tenant",
+    entityId: tenant.id,
+    description: `Loja "${input.name}" atualizada no painel da plataforma`,
+    oldValues: { name: tenant.name, status: tenant.status, planId: tenant.planId },
+    newValues: { name: input.name, status: input.status, planId: plan.id },
+  });
+
+  return { id: tenant.id };
+}
+
+/**
+ * Exclusão definitiva da loja e de todos os dados operacionais vinculados.
+ *
+ * A plataforma também oferece o cancelamento (soft delete). Esta operação é
+ * irreversível e exige a confirmação do nome exato da loja na interface.
+ * Os dados são apagados em ordem de dependência dentro de uma transação.
+ */
+export async function deleteTenant(
+  ctx: AuthContext,
+  raw: { tenantId: string; confirmName: string }
+): Promise<void> {
+  assertPlatform(ctx);
+  const tenant = await prisma.tenant.findUnique({ where: { id: raw.tenantId } });
+  if (!tenant) throw new Error("Loja não encontrada.");
+  if (raw.confirmName.trim() !== tenant.name) {
+    throw new Error("O nome digitado não confere com o nome da loja.");
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Auto-relacionamentos que impedem a exclusão direta.
+    await tx.ledgerEntry.updateMany({ where: { tenantId: tenant.id }, data: { reversalOfId: null } });
+    await tx.chartAccount.updateMany({ where: { tenantId: tenant.id }, data: { parentId: null } });
+    await tx.productCategory.updateMany({ where: { tenantId: tenant.id }, data: { parentId: null } });
+
+    // Histórico de vendas e devoluções.
+    await tx.saleReturnItem.deleteMany({ where: { saleReturn: { tenantId: tenant.id } } });
+    await tx.saleReturn.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.receiptToken.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.salePayment.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.saleItem.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.sale.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Financeiro.
+    await tx.receivablePayment.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.receivable.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.payablePayment.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.payable.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.ledgerEntry.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.accountTransfer.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Caixa.
+    await tx.cashMovement.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.cashSession.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Estoque e catálogo.
+    await tx.stockMovement.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.stockLevel.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.productBarcode.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.productVariant.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.product.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.brand.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.productCategory.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Cadastros e integrações.
+    await tx.supplier.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.customer.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.whatsAppLog.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.auditLog.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.apiKey.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.integration.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.tenantSetting.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Estrutura financeira e usuários.
+    await tx.paymentMethod.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.financialAccount.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.costCenter.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.chartAccount.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.documentCounter.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.user.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.role.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.branch.deleteMany({ where: { tenantId: tenant.id } });
+
+    // Cobranças, assinatura e a loja.
+    await tx.tenantCharge.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.subscription.deleteMany({ where: { tenantId: tenant.id } });
+    await tx.tenant.delete({ where: { id: tenant.id } });
+  });
+
+  await auditLog({
+    userId: ctx.userId,
+    tenantId: null,
+    action: "DELETE",
+    module: "plataforma",
+    entity: "Tenant",
+    entityId: tenant.id,
+    description: `Loja "${tenant.name}" excluída definitivamente do banco de dados`,
+    oldValues: { name: tenant.name, document: tenant.document, status: tenant.status },
+  });
+}
+
 
 export async function setTenantStatus(
   ctx: AuthContext,
@@ -289,21 +470,53 @@ export async function updateSubscription(ctx: AuthContext, raw: unknown) {
   });
 }
 
-export async function listCharges(ctx: AuthContext, filters: { status?: string } = {}) {
+export async function listCharges(
+  ctx: AuthContext,
+  filters: { status?: string; q?: string } = {}
+) {
   assertPlatform(ctx);
   return prisma.tenantCharge.findMany({
-    where: filters.status ? { status: filters.status as never } : {},
+    where: {
+      ...(filters.status ? { status: filters.status as never } : {}),
+      ...(filters.q
+        ? {
+            OR: [
+              { description: { contains: filters.q, mode: "insensitive" } },
+              { tenant: { name: { contains: filters.q, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    },
     orderBy: [{ dueDate: "desc" }],
     take: 100,
     include: { tenant: { select: { id: true, name: true } }, plan: { select: { name: true } } },
   });
 }
 
+export async function getCharge(ctx: AuthContext, chargeId: string) {
+  assertPlatform(ctx);
+  const charge = await prisma.tenantCharge.findUnique({
+    where: { id: chargeId },
+    include: {
+      tenant: { select: { id: true, name: true, email: true, phone: true, status: true } },
+      plan: { select: { name: true } },
+    },
+  });
+  if (!charge) throw new Error("Cobrança não encontrada.");
+  return charge;
+}
+
 export async function createCharge(ctx: AuthContext, raw: unknown) {
   assertPlatform(ctx);
   const input = platformChargeSchema.parse(raw);
   const tenant = await prisma.tenant.findUnique({ where: { id: input.tenantId } });
-  if (!tenant) throw new Error("Empresa não encontrada.");
+  if (!tenant) throw new Error("Loja não encontrada.");
+
+  const config = await getBillingConfig();
+  if (input.method === "PIX" && !config.pixKey) {
+    throw new Error("Configure a chave PIX da plataforma antes de emitir cobranças PIX.");
+  }
+
   const charge = await prisma.tenantCharge.create({
     data: {
       tenantId: tenant.id,
@@ -312,8 +525,21 @@ export async function createCharge(ctx: AuthContext, raw: unknown) {
       amount: money(input.amount),
       dueDate: new Date(`${input.dueDate}T12:00:00-03:00`),
       notes: input.notes ?? null,
+      method: input.method,
+      boletoCode: input.boletoCode || null,
+      boletoUrl: input.boletoUrl || null,
+      paymentUrl: input.paymentUrl || null,
+      instructions: input.instructions || config.boletoInstructions || null,
+      ...(input.method === "PIX"
+        ? {
+            pixKey: config.pixKey,
+            pixBeneficiary: config.pixBeneficiary,
+            pixCity: config.pixCity,
+          }
+        : {}),
     },
   });
+
   await auditLog({
     userId: ctx.userId,
     tenantId: null,
@@ -321,20 +547,94 @@ export async function createCharge(ctx: AuthContext, raw: unknown) {
     module: "plataforma",
     entity: "TenantCharge",
     entityId: charge.id,
-    description: `Cobrança "${charge.description}" criada para ${tenant.name}`,
+    description: `Cobrança "${charge.description}" (${input.method}) criada para ${tenant.name}`,
+  });
+  return { id: charge.id, publicToken: charge.publicToken };
+}
+
+export async function updateCharge(ctx: AuthContext, raw: unknown) {
+  assertPlatform(ctx);
+  const input = chargeUpdateSchema.parse(raw);
+  const charge = await prisma.tenantCharge.findUnique({
+    where: { id: input.id },
+    include: { tenant: { select: { name: true } } },
+  });
+  if (!charge) throw new Error("Cobrança não encontrada.");
+  if (charge.status === "PAGA" || charge.status === "CANCELADA") {
+    throw new Error("Cobranças pagas ou canceladas não podem ser editadas.");
+  }
+
+  const config = await getBillingConfig();
+  if (input.method === "PIX" && !charge.pixKey && !config.pixKey) {
+    throw new Error("Configure a chave PIX da plataforma antes de usar PIX nesta cobrança.");
+  }
+
+  await prisma.tenantCharge.update({
+    where: { id: charge.id },
+    data: {
+      description: input.description,
+      amount: money(input.amount),
+      dueDate: new Date(`${input.dueDate}T12:00:00-03:00`),
+      notes: input.notes ?? null,
+      method: input.method,
+      boletoCode: input.boletoCode || null,
+      boletoUrl: input.boletoUrl || null,
+      paymentUrl: input.paymentUrl || null,
+      instructions: input.instructions || null,
+      ...(input.method === "PIX" && !charge.pixKey
+        ? {
+            pixKey: config.pixKey,
+            pixBeneficiary: config.pixBeneficiary,
+            pixCity: config.pixCity,
+          }
+        : {}),
+    },
+  });
+
+  await auditLog({
+    userId: ctx.userId,
+    tenantId: null,
+    action: "UPDATE",
+    module: "plataforma",
+    entity: "TenantCharge",
+    entityId: charge.id,
+    description: `Cobrança "${input.description}" atualizada (${input.method}) — ${charge.tenant.name}`,
   });
   return { id: charge.id };
 }
 
 export async function settleCharge(ctx: AuthContext, chargeId: string) {
   assertPlatform(ctx);
-  const charge = await prisma.tenantCharge.findUnique({ where: { id: chargeId } });
+  const charge = await prisma.tenantCharge.findUnique({
+    where: { id: chargeId },
+    include: { tenant: { select: { id: true, name: true, status: true } } },
+  });
   if (!charge) throw new Error("Cobrança não encontrada.");
   if (charge.status === "PAGA") throw new Error("Cobrança já está paga.");
-  await prisma.tenantCharge.update({
-    where: { id: charge.id },
-    data: { status: "PAGA", paidAt: new Date() },
+
+  await prisma.$transaction(async (tx) => {
+    await tx.tenantCharge.update({
+      where: { id: charge.id },
+      data: { status: "PAGA", paidAt: new Date(), paidById: ctx.userId },
+    });
+
+    // Sem outras mensalidades em aberto, a loja suspensa volta a operar.
+    const remaining = await tx.tenantCharge.count({
+      where: {
+        tenantId: charge.tenantId,
+        id: { not: charge.id },
+        status: { in: ["PENDENTE", "VENCIDA"] },
+      },
+    });
+    if (remaining === 0 && charge.tenant.status === "SUSPENSO") {
+      await tx.tenant.update({ where: { id: charge.tenantId }, data: { status: "ATIVO" } });
+      await tx.subscription.updateMany({
+        where: { tenantId: charge.tenantId, status: { in: ["SUSPENSA", "VENCIDA"] } },
+        data: { status: "ATIVA" },
+      });
+    }
   });
+
   await auditLog({
     userId: ctx.userId,
     tenantId: null,
@@ -431,14 +731,21 @@ export async function listActiveNotices() {
 
 export async function platformChargeDefaults() {
   const tenants = await prisma.tenant.findMany({
-    where: { status: "ATIVO" },
+    where: { status: { in: ["ATIVO", "SUSPENSO"] } },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, plan: { select: { id: true, price: true } } },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      plan: { select: { id: true, price: true } },
+      subscription: { select: { status: true } },
+    },
   });
-  const plans = await listPlans(false);
+  const [plans, config] = await Promise.all([listPlans(false), getBillingConfig()]);
   return {
     tenants,
     plans,
+    config,
     today: todayISO(),
     monthStart: `${todayISO().slice(0, 7)}-01`,
     periodStart: startOfBusinessDay(),

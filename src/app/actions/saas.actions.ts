@@ -7,18 +7,23 @@ import {
   cancelCharge,
   createCharge,
   createTenant,
+  deleteTenant,
   saveNotice,
   savePlan,
   setTenantStatus,
   settleCharge,
+  updateCharge,
   updateSubscription,
+  updateTenant,
 } from "@/services/saas.service";
+import { runBillingEnforcement, saveBillingConfig } from "@/services/billing.service";
 
 function revalidateAdmin(): void {
   revalidatePath("/admin");
   revalidatePath("/admin/empresas");
   revalidatePath("/admin/planos");
   revalidatePath("/admin/cobrancas");
+  revalidatePath("/admin/financeiro");
   revalidatePath("/admin/avisos");
 }
 
@@ -28,6 +33,28 @@ export async function createTenantAction(raw: unknown): Promise<ActionResult<{ t
     const result = await createTenant(ctx, raw);
     revalidateAdmin();
     return { tenantId: result.tenantId };
+  });
+}
+
+export async function updateTenantAction(raw: unknown): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    const result = await updateTenant(ctx, raw);
+    revalidateAdmin();
+    revalidatePath(`/admin/empresas/${result.id}`);
+    return result;
+  });
+}
+
+export async function deleteTenantAction(raw: {
+  tenantId: string;
+  confirmName: string;
+}): Promise<ActionResult> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    await deleteTenant(ctx, raw);
+    revalidateAdmin();
+    return undefined;
   });
 }
 
@@ -66,6 +93,36 @@ export async function createChargeAction(raw: unknown): Promise<ActionResult<{ i
   return runAction(async () => {
     const ctx = await actionContext();
     const result = await createCharge(ctx, raw);
+    revalidateAdmin();
+    return result;
+  });
+}
+
+export async function updateChargeAction(raw: unknown): Promise<ActionResult<{ id: string }>> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    const result = await updateCharge(ctx, raw);
+    revalidateAdmin();
+    revalidatePath(`/admin/cobrancas/${result.id}`);
+    return result;
+  });
+}
+
+export async function saveBillingConfigAction(raw: unknown): Promise<ActionResult> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    await saveBillingConfig(ctx, raw);
+    revalidateAdmin();
+    return undefined;
+  });
+}
+
+export async function runBillingEnforcementAction(): Promise<
+  ActionResult<{ overdue: number; suspended: number }>
+> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    const result = await runBillingEnforcement(ctx);
     revalidateAdmin();
     return result;
   });

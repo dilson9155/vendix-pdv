@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { ArrowRight, CreditCard, KeyRound, Megaphone, Receipt, Store } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/tenant";
 import { getPlatformOverview, listCharges, listNotices, listPlatformAudit, listPlans, listTenants } from "@/services/saas.service";
 import { formatBRL } from "@/lib/money";
@@ -26,8 +28,31 @@ export default async function AdminPage() {
       <PageHeader
         eyebrow="Plataforma"
         title="Administração SaaS"
-        description="Empresas, planos, cobranças, avisos e auditoria da plataforma Vendix."
+        description="Lojas, planos, cobranças com PIX/boleto, avisos e auditoria da plataforma Vendix."
       />
+
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        {[
+          { href: "/admin/empresas", label: "Lojas", description: "Cadastrar, editar, suspender e excluir", icon: Store },
+          { href: "/admin/cobrancas", label: "Cobranças", description: "Mensalidades, PIX e boleto", icon: Receipt },
+          { href: "/admin/financeiro", label: "Recebimentos", description: "Chave PIX e régua de cobrança", icon: KeyRound },
+          { href: "/admin/planos", label: "Planos", description: "Preços e limites", icon: CreditCard },
+          { href: "/admin/avisos", label: "Avisos", description: "Comunicados às lojas", icon: Megaphone },
+        ].map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="group rounded-xl border bg-card p-3 shadow-sm transition hover:border-primary/40 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <item.icon className="size-4 text-primary" />
+              <ArrowRight className="size-3.5 text-muted-foreground transition group-hover:translate-x-0.5" />
+            </div>
+            <p className="mt-2 text-sm font-semibold">{item.label}</p>
+            <p className="text-[11px] leading-tight text-muted-foreground">{item.description}</p>
+          </Link>
+        ))}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Empresas" value={String(overview.tenants)} hint={`${overview.activeTenants} ativa(s)`} />

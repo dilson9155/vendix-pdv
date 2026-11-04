@@ -14,7 +14,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const platformOnly = ctx.isPlatformAdmin && !ctx.tenantId;
 
   if (platformOnly) {
-    push("Plataforma", [{ href: "/admin", label: "Plataforma SaaS", icon: "admin" as const }]);
+    push("Plataforma", [
+      { href: "/admin", label: "Painel SaaS", icon: "admin" as const },
+      { href: "/admin/empresas", label: "Lojas", icon: "store" as const },
+      { href: "/admin/cobrancas", label: "Cobranças", icon: "receipt" as const },
+      { href: "/admin/financeiro", label: "Recebimentos", icon: "finance" as const },
+      { href: "/admin/planos", label: "Planos", icon: "credit" as const },
+      { href: "/admin/avisos", label: "Avisos", icon: "bell" as const },
+    ]);
     return (
       <AppShell
         userName={ctx.name}
