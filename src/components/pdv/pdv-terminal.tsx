@@ -75,6 +75,16 @@ export function PdvTerminal({
   const router = useRouter();
   const idempotencyKey = useRef(crypto.randomUUID());
   const searchInput = useRef<HTMLInputElement>(null);
+  // Debounce + número de sequência descarta respostas fora de ordem.
+  const productSearch = useRef<{ timer: ReturnType<typeof setTimeout> | null; seq: number }>({
+    timer: null,
+    seq: 0,
+  });
+  const customerSearch = useRef<{ timer: ReturnType<typeof setTimeout> | null; seq: number }>({
+    timer: null,
+    seq: 0,
+  });
+  const SEARCH_DEBOUNCE_MS = 250;
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -126,6 +136,7 @@ export function PdvTerminal({
   const maxDiscountValue = (subtotal * maxDiscountPercent) / 100;
 
   function addProduct(product: PosProduct) {
+    cancelProductSearch();
     setCart((current) => {
       const existing = current.find(
         (item) => item.productId === product.productId && item.variantId === product.variantId
@@ -142,20 +153,47 @@ export function PdvTerminal({
     searchInput.current?.focus();
   }
 
+  function cancelProductSearch() {
+    if (productSearch.current.timer) {
+      clearTimeout(productSearch.current.timer);
+      productSearch.current.timer = null;
+    }
+    productSearch.current.seq += 1;
+  }
+
   async function search(value: string) {
     setTerm(value);
+    cancelProductSearch();
+    const state = productSearch.current;
     if (value.trim().length < 2) {
+      setSearching(false);
       setResults([]);
       return;
     }
+    // Aguarda o intervalo entre teclas antes de ir ao servidor.
     setSearching(true);
+    const seq = state.seq;
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      void runProductSearch(value, seq);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  async function runProductSearch(value: string, seq: number) {
     const result = await searchPdvProductsAction(value, branchId ?? undefined);
+    // Resposta antiga (usuário já digitou mais) é descartada.
+    if (seq !== productSearch.current.seq) return;
     setSearching(false);
     if (result.ok) setResults(result.data ?? []);
+    else {
+      setResults([]);
+      setError(result.error);
+    }
   }
 
   async function barcode(value: string) {
     if (!value.trim()) return;
+    cancelProductSearch();
     setSearching(true);
     const result = await barcodeLookupAction(value.trim(), branchId ?? undefined);
     setSearching(false);
@@ -175,11 +213,26 @@ export function PdvTerminal({
 
   async function searchCustomer(value: string) {
     setCustomerName(value);
+    const state = customerSearch.current;
+    if (state.timer) {
+      clearTimeout(state.timer);
+      state.timer = null;
+    }
+    state.seq += 1;
     if (value.trim().length < 2) {
       setCustomerResults([]);
       return;
     }
+    const seq = state.seq;
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      void runCustomerSearch(value, seq);
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  async function runCustomerSearch(value: string, seq: number) {
     const result = await searchCustomersAction(value);
+    if (seq !== customerSearch.current.seq) return;
     if (result.ok) setCustomerResults(result.data ?? []);
   }
 

@@ -594,23 +594,45 @@ export async function findByBarcode(
   const branch = branchId || ctx.branchId || null;
   if (branch) assertBranchAccess(ctx, branch);
 
-  const alt = await prisma.productBarcode.findFirst({
-    where: { tenantId: ctx.tenantId, code: trimmed },
-    select: { productId: true, variantId: true },
-  });
+  const [alt, productByCode, variantByCode] = await Promise.all([
+    prisma.productBarcode.findFirst({
+      where: { tenantId: ctx.tenantId, code: trimmed },
+      select: { productId: true, variantId: true },
+    }),
+    prisma.product.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        active: true,
+        OR: [{ barcode: trimmed }, { sku: trimmed }],
+      },
+      include: { variants: { where: { active: true } } },
+    }),
+    prisma.productVariant.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        active: true,
+        OR: [{ barcode: trimmed }, { sku: trimmed }],
+      },
+      include: { product: true },
+    }),
+  ]);
 
-  const product = await prisma.product.findFirst({
-    where: {
-      tenantId: ctx.tenantId,
-      active: true,
-      OR: [
-        { barcode: trimmed },
-        { sku: trimmed },
-        ...(alt?.productId ? [{ id: alt.productId }] : []),
-      ],
-    },
-    include: { variants: { where: { active: true } } },
-  });
+  // Resolve o código alternativo apenas quando o direto não achou nada.
+  let product = productByCode;
+  let variantHit = variantByCode;
+  if (!product && alt?.productId) {
+    product = await prisma.product.findFirst({
+      where: { id: alt.productId, tenantId: ctx.tenantId, active: true },
+      include: { variants: { where: { active: true } } },
+    });
+  }
+  if (!product && !variantHit && alt?.variantId) {
+    variantHit = await prisma.productVariant.findFirst({
+      where: { id: alt.variantId, tenantId: ctx.tenantId, active: true },
+      include: { product: true },
+    });
+  }
+
   if (product) {
     if (product.hasVariants) {
       const variantId = alt?.variantId ?? null;
@@ -652,14 +674,7 @@ export async function findByBarcode(
     };
   }
 
-  const variant = await prisma.productVariant.findFirst({
-    where: {
-      tenantId: ctx.tenantId,
-      active: true,
-      OR: [{ barcode: trimmed }, { sku: trimmed }, ...(alt?.variantId ? [{ id: alt.variantId }] : [])],
-    },
-    include: { product: true },
-  });
+  const variant = variantHit;
   if (variant && variant.product.active) {
     const stock = await getStock(ctx.tenantId, branch, variant.productId, variant.id);
     return {
@@ -694,6 +709,34 @@ async function getStock(
   return row ? Number(row.quantity) : 0;
 }
 
+type StockKey = { productId: string; variantId: string | null };
+
+function stockMapKey(key: StockKey) {
+  return `${key.productId}:${key.variantId ?? ""}`;
+}
+
+/** Carrega os saldos de vários itens em uma única consulta (evita N+1). */
+async function getStockMap(
+  tenantId: string,
+  branchId: string | null,
+  keys: StockKey[]
+): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!branchId || keys.length === 0) return map;
+  const rows = await prisma.stockLevel.findMany({
+    where: {
+      tenantId,
+      branchId,
+      OR: keys.map((key) => ({ productId: key.productId, variantId: key.variantId })),
+    },
+    select: { productId: true, variantId: true, quantity: true },
+  });
+  for (const row of rows) {
+    map.set(stockMapKey({ productId: row.productId, variantId: row.variantId }), Number(row.quantity));
+  }
+  return map;
+}
+
 export async function searchPosProducts(
   ctx: AuthContext,
   term: string,
@@ -721,16 +764,17 @@ export async function searchPosProducts(
     include: { variants: { where: { active: true }, take: 20 } },
   });
 
-  const results: PosProduct[] = [];
+  const entries: Array<Omit<PosProduct, "stock"> & { stockKey: StockKey }> = [];
+  const lowered = q.toLowerCase();
   for (const product of products) {
     if (product.hasVariants) {
       for (const variant of product.variants) {
         const match =
-          variant.sku.toLowerCase().includes(q.toLowerCase()) ||
-          (variant.barcode ?? "").toLowerCase().includes(q.toLowerCase()) ||
-          product.name.toLowerCase().includes(q.toLowerCase());
+          variant.sku.toLowerCase().includes(lowered) ||
+          (variant.barcode ?? "").toLowerCase().includes(lowered) ||
+          product.name.toLowerCase().includes(lowered);
         if (!match) continue;
-        results.push({
+        entries.push({
           productId: product.id,
           variantId: variant.id,
           name: product.name,
@@ -738,14 +782,14 @@ export async function searchPosProducts(
           sku: variant.sku,
           barcode: variant.barcode,
           price: variant.price ? Number(variant.price) : effectivePrice(product),
-          stock: await getStock(ctx.tenantId, branch, product.id, variant.id),
           unit: product.unit,
           hasVariants: true,
           variantLabel: [variant.color, variant.size].filter(Boolean).join(" / ") || null,
+          stockKey: { productId: product.id, variantId: variant.id },
         });
       }
     } else {
-      results.push({
+      entries.push({
         productId: product.id,
         variantId: null,
         name: product.name,
@@ -753,15 +797,27 @@ export async function searchPosProducts(
         sku: product.sku,
         barcode: product.barcode,
         price: effectivePrice(product),
-        stock: await getStock(ctx.tenantId, branch, product.id, null),
         unit: product.unit,
         hasVariants: false,
         variantLabel: null,
+        stockKey: { productId: product.id, variantId: null },
       });
     }
-    if (results.length >= limit) break;
+    if (entries.length >= limit) break;
   }
-  return results.slice(0, limit);
+
+  const selected = entries.slice(0, limit);
+  // Uma única consulta de estoque para todos os resultados (antes: uma por item).
+  const stock = await getStockMap(
+    ctx.tenantId,
+    branch,
+    selected.map((entry) => entry.stockKey)
+  );
+
+  return selected.map(({ stockKey, ...entry }) => ({
+    ...entry,
+    stock: stock.get(stockMapKey(stockKey)) ?? 0,
+  }));
 }
 
 export async function listCatalogOptions(ctx: AuthContext) {

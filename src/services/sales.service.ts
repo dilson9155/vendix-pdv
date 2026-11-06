@@ -40,52 +40,7 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
   const input: SaleInput = saleSchema.parse(raw);
   assertBranchAccess(ctx, input.branchId);
 
-  // Idempotência: retry do cliente devolve a mesma venda.
-  const previous = await prisma.sale.findFirst({
-    where: { tenantId: ctx.tenantId, idempotencyKey: input.idempotencyKey },
-    select: { id: true, documentNumber: true, total: true, status: true },
-  });
-  if (previous) {
-    return {
-      id: previous.id,
-      documentNumber: previous.documentNumber,
-      total: Number(previous.total),
-      status: previous.status,
-      duplicate: true,
-    };
-  }
-
-  const branch = await prisma.branch.findFirst({
-    where: { id: input.branchId, tenantId: ctx.tenantId, status: "ATIVO" },
-    select: { id: true, code: true, name: true },
-  });
-  if (!branch) throw new Error("Unidade inválida ou inativa.");
-
-  if (input.customerId) {
-    const customer = await prisma.customer.findFirst({
-      where: { id: input.customerId, tenantId: ctx.tenantId },
-      select: { id: true, name: true },
-    });
-    if (!customer) throw new Error("Cliente inválido.");
-  }
-
-  let session: { id: string; branchId: string; status: string } | null = null;
-  if (input.cashSessionId) {
-    session = await prisma.cashSession.findFirst({
-      where: { id: input.cashSessionId, tenantId: ctx.tenantId },
-      select: { id: true, branchId: true, status: true },
-    });
-    if (!session) throw new Error("Sessão de caixa inválida.");
-    if (session.branchId !== input.branchId) {
-      throw new Error("A sessão de caixa pertence a outra unidade.");
-    }
-    if (session.status !== "ABERTO") throw new Error("O caixa está fechado.");
-  }
-
-  const prefs = await getTenantPreferences(ctx.tenantId);
-  const canDiscount = hasPermission(ctx, "sales.discount");
-
-  // Consolida itens repetidos e carrega preços do servidor.
+  // Consolida itens repetidos (processamento puro, sem I/O).
   const normalized = new Map<string, NormalizedItem>();
   for (const item of input.items) {
     const key = `${item.productId}:${item.variantId ?? ""}`;
@@ -105,63 +60,116 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
   }
 
   const methodIds = [...new Set(input.payments.map((p) => p.paymentMethodId))];
-  const methods = await prisma.paymentMethod.findMany({
-    where: { tenantId: ctx.tenantId, id: { in: methodIds }, active: true },
-    include: { financialAccount: { select: { id: true, branchId: true } } },
-  });
+
+  // Idempotência + validações independentes em paralelo (uma só passada de rede).
+  const [previous, branch, customer, session, prefs, methods, cashAccount, revenueAccount] =
+    await Promise.all([
+      prisma.sale.findFirst({
+        where: { tenantId: ctx.tenantId, idempotencyKey: input.idempotencyKey },
+        select: { id: true, documentNumber: true, total: true, status: true },
+      }),
+      prisma.branch.findFirst({
+        where: { id: input.branchId, tenantId: ctx.tenantId, status: "ATIVO" },
+        select: { id: true, code: true, name: true },
+      }),
+      input.customerId
+        ? prisma.customer.findFirst({
+            where: { id: input.customerId, tenantId: ctx.tenantId },
+            select: { id: true, name: true },
+          })
+        : null,
+      input.cashSessionId
+        ? prisma.cashSession.findFirst({
+            where: { id: input.cashSessionId, tenantId: ctx.tenantId },
+            select: { id: true, branchId: true, status: true },
+          })
+        : null,
+      getTenantPreferences(ctx.tenantId),
+      prisma.paymentMethod.findMany({
+        where: { tenantId: ctx.tenantId, id: { in: methodIds }, active: true },
+        include: { financialAccount: { select: { id: true, branchId: true } } },
+      }),
+      getDefaultCashAccount(ctx.tenantId, input.branchId),
+      getDefaultRevenueChartAccount(ctx.tenantId),
+    ]);
+
+  // Idempotência: retry do cliente devolve a mesma venda.
+  if (previous) {
+    return {
+      id: previous.id,
+      documentNumber: previous.documentNumber,
+      total: Number(previous.total),
+      status: previous.status,
+      duplicate: true,
+    };
+  }
+
+  if (!branch) throw new Error("Unidade inválida ou inativa.");
+  if (input.customerId && !customer) throw new Error("Cliente inválido.");
+  if (input.cashSessionId) {
+    if (!session) throw new Error("Sessão de caixa inválida.");
+    if (session.branchId !== input.branchId) {
+      throw new Error("A sessão de caixa pertence a outra unidade.");
+    }
+    if (session.status !== "ABERTO") throw new Error("O caixa está fechado.");
+  }
+
+  const canDiscount = hasPermission(ctx, "sales.discount");
   const methodMap = new Map(methods.map((m) => [m.id, m]));
   if (methodIds.length !== methods.length) {
     throw new Error("Forma de pagamento inválida ou inativa.");
   }
 
-  // Monta linhas com preço e custo atuais do banco.
-  const lines = await Promise.all(
-    [...normalized.values()].map(async (item) => {
-      const product = await prisma.product.findFirst({
-        where: { id: item.productId, tenantId: ctx.tenantId, active: true },
-        include: { variants: { where: { active: true } } },
-      });
-      if (!product) throw new Error("Produto não encontrado ou inativo.");
-      if (product.hasVariants && !item.variantId) {
-        throw new Error(`Selecione a variação de "${product.name}".`);
-      }
-      const variant = item.variantId
-        ? product.variants.find((v) => v.id === item.variantId)
-        : null;
-      if (item.variantId && !variant) {
-        throw new Error(`Variação inválida para "${product.name}".`);
-      }
+  // Monta linhas com preço e custo atuais do banco (uma única consulta para todos os itens).
+  const productIds = [...new Set([...normalized.values()].map((item) => item.productId))];
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds }, tenantId: ctx.tenantId, active: true },
+    include: { variants: { where: { active: true } } },
+  });
+  const productMap = new Map(products.map((product) => [product.id, product]));
 
-      const promoActive =
-        product.promoPrice !== null &&
-        (!product.promoStart || product.promoStart.getTime() <= Date.now()) &&
-        (!product.promoEnd || product.promoEnd.getTime() >= Date.now());
-      const price = dec(
-        variant?.price ?? (promoActive ? product.promoPrice : product.price)
-      );
-      const cost = dec(variant?.cost ?? product.cost);
-      const gross = round2(price.times(item.quantity));
+  const lines = [...normalized.values()].map((item) => {
+    const product = productMap.get(item.productId);
+    if (!product) throw new Error("Produto não encontrado ou inativo.");
+    if (product.hasVariants && !item.variantId) {
+      throw new Error(`Selecione a variação de "${product.name}".`);
+    }
+    const variant = item.variantId
+      ? product.variants.find((v) => v.id === item.variantId)
+      : null;
+    if (item.variantId && !variant) {
+      throw new Error(`Variação inválida para "${product.name}".`);
+    }
 
-      if (item.quantity <= 0) throw new Error(`Quantidade inválida em "${product.name}".`);
-      if (dec(item.discount).greaterThan(gross)) {
-        throw new Error(`Desconto maior que o valor do item "${product.name}".`);
-      }
+    const promoActive =
+      product.promoPrice !== null &&
+      (!product.promoStart || product.promoStart.getTime() <= Date.now()) &&
+      (!product.promoEnd || product.promoEnd.getTime() >= Date.now());
+    const price = dec(
+      variant?.price ?? (promoActive ? product.promoPrice : product.price)
+    );
+    const cost = dec(variant?.cost ?? product.cost);
+    const gross = round2(price.times(item.quantity));
 
-      const lineTotal = round2(gross.minus(item.discount));
-      return {
-        productId: product.id,
-        variantId: item.variantId,
-        name: product.name,
-        sku: variant?.sku ?? product.sku,
-        unitPrice: price,
-        unitCost: cost,
-        quantity: item.quantity,
-        discount: round2(item.discount),
-        total: lineTotal,
-        stockKey: { productId: product.id, variantId: item.variantId },
-      };
-    })
-  );
+    if (item.quantity <= 0) throw new Error(`Quantidade inválida em "${product.name}".`);
+    if (dec(item.discount).greaterThan(gross)) {
+      throw new Error(`Desconto maior que o valor do item "${product.name}".`);
+    }
+
+    const lineTotal = round2(gross.minus(item.discount));
+    return {
+      productId: product.id,
+      variantId: item.variantId,
+      name: product.name,
+      sku: variant?.sku ?? product.sku,
+      unitPrice: price,
+      unitCost: cost,
+      quantity: item.quantity,
+      discount: round2(item.discount),
+      total: lineTotal,
+      stockKey: { productId: product.id, variantId: item.variantId },
+    };
+  });
 
   const subtotal = round2(sumValues(lines.map((l) => l.total)));
   const globalDiscount = round2(input.discount);
@@ -236,11 +244,6 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
     )
   );
 
-  const [cashAccount, revenueAccount] = await Promise.all([
-    getDefaultCashAccount(ctx.tenantId, branch.id),
-    getDefaultRevenueChartAccount(ctx.tenantId),
-  ]);
-
   const saleId = await withSerializableTransaction(async (tx) => {
     // Numeração sequencial por filial.
     const counter = await tx.documentCounter.upsert({
@@ -276,111 +279,138 @@ export async function createSale(ctx: AuthContext, raw: unknown) {
       },
     });
 
-    for (const line of lines) {
-      const created = await tx.saleItem.create({
-        data: {
-          tenantId: ctx.tenantId,
-          saleId: sale.id,
-          productId: line.productId,
-          variantId: line.variantId,
-          description: line.name,
-          sku: line.sku,
-          quantity: line.quantity.toFixed(3),
-          unitPrice: money(line.unitPrice),
-          unitCost: money(line.unitCost),
-          discount: money(line.discount),
-          total: money(line.total),
-        },
-      });
-      void created;
-
-      // Estoque com controle de concorrência (transação serializável).
-      const variantKey = line.variantId ?? null;
-      const level = await findStockLevel(tx, {
-        branchId: branch.id,
+    // Itens da venda em lote (uma escrita em vez de uma por item).
+    await tx.saleItem.createMany({
+      data: lines.map((line) => ({
+        tenantId: ctx.tenantId,
+        saleId: sale.id,
         productId: line.productId,
-        variantId: variantKey,
-      });
+        variantId: line.variantId,
+        description: line.name,
+        sku: line.sku,
+        quantity: line.quantity.toFixed(3),
+        unitPrice: money(line.unitPrice),
+        unitCost: money(line.unitCost),
+        discount: money(line.discount),
+        total: money(line.total),
+      })),
+    });
+
+    // Estoque com controle de concorrência (transação serializável):
+    // todos os saldos lidos em uma consulta e gravados em lote.
+    const stockKeys = lines.map((line) => ({
+      productId: line.productId,
+      variantId: line.variantId ?? null,
+    }));
+    const levels = stockKeys.length
+      ? await tx.stockLevel.findMany({
+          where: {
+            branchId: branch.id,
+            OR: stockKeys.map((key) => ({ productId: key.productId, variantId: key.variantId })),
+          },
+          select: { id: true, productId: true, variantId: true, quantity: true },
+        })
+      : [];
+    const levelMap = new Map(
+      levels.map((level) => [`${level.productId}:${level.variantId ?? ""}`, level])
+    );
+
+    const createdLevels: Prisma.StockLevelCreateManyInput[] = [];
+    const movements: Prisma.StockMovementCreateManyInput[] = [];
+    for (const [index, line] of lines.entries()) {
+      const key = stockKeys[index];
+      const level = levelMap.get(`${key.productId}:${key.variantId ?? ""}`);
       const current = dec(level?.quantity ?? 0);
       const next = round2(current.minus(line.quantity));
       if (next.lessThan(0) && !prefs.allowNegativeStock) {
         throw new Error(`Estoque insuficiente para "${line.name}". Saldo: ${current.toFixed(3)}.`);
       }
-      await putStockLevel(tx, {
+      if (level) {
+        await tx.stockLevel.update({
+          where: { id: level.id },
+          data: { quantity: next.toFixed(3) },
+        });
+      } else {
+        createdLevels.push({
+          tenantId: ctx.tenantId,
+          branchId: branch.id,
+          productId: key.productId,
+          variantId: key.variantId,
+          quantity: next.toFixed(3),
+        });
+      }
+      movements.push({
         tenantId: ctx.tenantId,
         branchId: branch.id,
         productId: line.productId,
-        variantId: variantKey,
-        quantity: next.toFixed(3),
-      });
-      await tx.stockMovement.create({
-        data: {
-          tenantId: ctx.tenantId,
-          branchId: branch.id,
-          productId: line.productId,
-          variantId: line.variantId,
-          type: "VENDA",
-          quantity: (-line.quantity).toFixed(3),
-          unitCost: money(line.unitCost),
-          balanceAfter: next.toFixed(3),
-          reason: `Venda ${documentNumber}`,
-          document: documentNumber,
-          saleId: sale.id,
-          userId: ctx.userId,
-        },
+        variantId: line.variantId,
+        type: "VENDA",
+        quantity: (-line.quantity).toFixed(3),
+        unitCost: money(line.unitCost),
+        balanceAfter: next.toFixed(3),
+        reason: `Venda ${documentNumber}`,
+        document: documentNumber,
+        saleId: sale.id,
+        userId: ctx.userId,
       });
     }
+    if (createdLevels.length) {
+      await tx.stockLevel.createMany({ data: createdLevels });
+    }
+    if (movements.length) {
+      await tx.stockMovement.createMany({ data: movements });
+    }
+
+    // Pagamentos em lote (uma escrita para todas as formas).
+    await tx.salePayment.createMany({
+      data: payments.map((payment) => ({
+        tenantId: ctx.tenantId,
+        saleId: sale.id,
+        paymentMethodId: payment.method.id,
+        methodKind: payment.method.kind,
+        methodName: payment.method.name,
+        amount: money(payment.appliedAmount),
+        feeAmount: money(
+          round2(payment.method.feePercent.times(payment.appliedAmount).dividedBy(100))
+        ),
+        installments: payment.installments,
+        financialAccountId: payment.method.financialAccountId,
+        notes: payment.notes ?? null,
+        status: "CONFIRMADO",
+      })),
+    });
 
     for (const payment of payments) {
-      const fee = round2(
-        payment.method.feePercent.times(payment.appliedAmount).dividedBy(100)
-      );
-      await tx.salePayment.create({
-        data: {
-          tenantId: ctx.tenantId,
-          saleId: sale.id,
-          paymentMethodId: payment.method.id,
-          methodKind: payment.method.kind,
-          methodName: payment.method.name,
-          amount: money(payment.appliedAmount),
-          feeAmount: money(fee),
-          installments: payment.installments,
-          financialAccountId: payment.method.financialAccountId,
-          notes: payment.notes ?? null,
-          status: "CONFIRMADO",
-        },
-      });
-
       if (payment.method.kind === "CREDITO_LOJA") {
         // Crediário: gera contas a receber (não entra como dinheiro no caixa).
         const installments = Math.max(1, payment.installments);
         const parts = splitInstallments(payment.appliedAmount, installments);
         const groupId = installments > 1 ? randomUUID() : null;
         const today = new Date();
+        const receivables: Prisma.ReceivableCreateManyInput[] = [];
         for (let index = 0; index < parts.length; index += 1) {
-          await tx.receivable.create({
-            data: {
-              tenantId: ctx.tenantId,
-              branchId: branch.id,
-              customerId: input.customerId || null,
-              saleId: sale.id,
-              description:
-                installments > 1
-                  ? `Venda ${documentNumber} (${index + 1}/${installments})`
-                  : `Venda ${documentNumber}`,
-              document: documentNumber,
-              chartAccountId: revenueAccount?.id ?? null,
-              issueDate: today,
-              competenceDate: today,
-              dueDate: addMonths(today, index),
-              value: money(parts[index]),
-              createdById: ctx.userId,
-              installmentGroupId: groupId,
-              installmentNumber: installments > 1 ? index + 1 : null,
-              installmentTotal: installments > 1 ? installments : null,
-            },
+          receivables.push({
+            tenantId: ctx.tenantId,
+            branchId: branch.id,
+            customerId: input.customerId || null,
+            saleId: sale.id,
+            description:
+              installments > 1
+                ? `Venda ${documentNumber} (${index + 1}/${installments})`
+                : `Venda ${documentNumber}`,
+            document: documentNumber,
+            chartAccountId: revenueAccount?.id ?? null,
+            issueDate: today,
+            competenceDate: today,
+            dueDate: addMonths(today, index),
+            value: money(parts[index]),
+            createdById: ctx.userId,
+            installmentGroupId: groupId,
+            installmentNumber: installments > 1 ? index + 1 : null,
+            installmentTotal: installments > 1 ? installments : null,
           });
         }
+        await tx.receivable.createMany({ data: receivables });
       } else if (payment.appliedAmount.greaterThan(0)) {
         const accountId =
           payment.method.financialAccountId ?? cashAccount.id;
