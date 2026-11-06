@@ -439,7 +439,8 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
     }
 
     return product;
-  });
+    // Variações x filiais podem gerar várias escritas em conexão remota.
+  }, { maxWait: 10_000, timeout: 30_000 });
 
   await auditLog({
     userId: ctx.userId,

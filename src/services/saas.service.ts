@@ -275,7 +275,7 @@ export async function updateTenant(ctx: AuthContext, raw: unknown) {
         },
       });
     }
-  });
+  }, { maxWait: 10_000, timeout: 30_000 });
 
   await auditLog({
     userId: ctx.userId,
@@ -368,7 +368,9 @@ export async function deleteTenant(
     await tx.tenantCharge.deleteMany({ where: { tenantId: tenant.id } });
     await tx.subscription.deleteMany({ where: { tenantId: tenant.id } });
     await tx.tenant.delete({ where: { id: tenant.id } });
-  });
+    // Exclusão percorre ~40 tabelas em conexão remota: limite padrão de 5s
+    // expirava no meio da transação.
+  }, { maxWait: 10_000, timeout: 60_000 });
 
   await auditLog({
     userId: ctx.userId,
@@ -635,7 +637,7 @@ export async function settleCharge(ctx: AuthContext, chargeId: string) {
         data: { status: "ATIVA" },
       });
     }
-  });
+  }, { maxWait: 10_000, timeout: 30_000 });
 
   await auditLog({
     userId: ctx.userId,

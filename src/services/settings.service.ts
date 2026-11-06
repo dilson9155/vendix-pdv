@@ -128,7 +128,7 @@ export async function updateCompanySettings(ctx: AuthContext, raw: unknown): Pro
       input.requireCustomerOnCredit,
       "pdv"
     );
-  });
+  }, { maxWait: 10_000, timeout: 30_000 });
 
   await auditLog({
     userId: ctx.userId,

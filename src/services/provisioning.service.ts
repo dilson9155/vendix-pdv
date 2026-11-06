@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_ROLES } from "@/lib/permissions";
@@ -58,7 +59,8 @@ export async function createTenantFinancialDefaults(
 ) {
   const { tenantId, branchId } = input;
 
-  // Plano de contas gerencial
+  // Plano de contas gerencial — criado em lote com ids gerados no cliente
+  // para manter poucas idas ao banco (a transação roda em conexão remota).
   const codeToId = new Map<string, string>();
   const existingAccounts = await tx.chartAccount.findMany({
     where: { tenantId },
@@ -66,21 +68,26 @@ export async function createTenantFinancialDefaults(
   });
 
   if (existingAccounts.length === 0) {
-    for (const account of [...CHART_OF_ACCOUNTS].sort((a, b) => a.code.localeCompare(b.code, "pt-BR"))) {
-      const parentId = account.parent ? codeToId.get(account.parent) ?? null : null;
-      const created = await tx.chartAccount.create({
-        data: {
-          tenantId,
-          code: account.code,
-          name: account.name,
-          nature: account.nature,
-          isAnalytic: account.analytic,
-          parentId,
-          level: account.code.split(".").length,
-        },
-      });
-      codeToId.set(account.code, created.id);
-    }
+    const sorted = [...CHART_OF_ACCOUNTS].sort(
+      (a, b) =>
+        a.code.split(".").length - b.code.split(".").length ||
+        a.code.localeCompare(b.code, "en")
+    );
+    const rows = sorted.map((account) => {
+      const id = randomUUID();
+      codeToId.set(account.code, id);
+      return {
+        id,
+        tenantId,
+        code: account.code,
+        name: account.name,
+        nature: account.nature,
+        isAnalytic: account.analytic,
+        parentId: account.parent ? codeToId.get(account.parent) ?? null : null,
+        level: account.code.split(".").length,
+      };
+    });
+    await tx.chartAccount.createMany({ data: rows });
   } else {
     for (const account of existingAccounts) {
       codeToId.set(account.code, account.id);
@@ -108,18 +115,16 @@ export async function createTenantFinancialDefaults(
 
   const paymentMethods = await tx.paymentMethod.count({ where: { tenantId } });
   if (paymentMethods === 0) {
-    for (const [index, method] of PAYMENT_METHODS.entries()) {
-      await tx.paymentMethod.create({
-        data: {
-          tenantId,
-          name: method.name,
-          kind: method.kind,
-          financialAccountId: cashAccount.id,
-          requiresCustomer: method.kind === "CREDITO_LOJA",
-          sortOrder: index,
-        },
-      });
-    }
+    await tx.paymentMethod.createMany({
+      data: PAYMENT_METHODS.map((method, index) => ({
+        tenantId,
+        name: method.name,
+        kind: method.kind,
+        financialAccountId: cashAccount.id,
+        requiresCustomer: method.kind === "CREDITO_LOJA",
+        sortOrder: index,
+      })),
+    });
   }
 
   const costCenter = await tx.costCenter.findFirst({ where: { tenantId, code: "GERAL" }, select: { id: true } });
@@ -140,16 +145,14 @@ export async function createTenantFinancialDefaults(
       { key: "company.demo", value: Boolean(input.demo), category: "sistema" },
     ];
 
-    for (const setting of defaultSettings) {
-      await tx.tenantSetting.create({
-        data: {
-          tenantId,
-          key: setting.key,
-          value: setting.value as Prisma.InputJsonValue,
-          category: setting.category,
-        },
-      });
-    }
+    await tx.tenantSetting.createMany({
+      data: defaultSettings.map((setting) => ({
+        tenantId,
+        key: setting.key,
+        value: setting.value as Prisma.InputJsonValue,
+        category: setting.category,
+      })),
+    });
   }
 
   return { cashAccountId: cashAccount.id, receivablesParent, expenseParent };
@@ -181,79 +184,85 @@ export type ProvisionInput = {
 export async function provisionTenant(input: ProvisionInput): Promise<{ tenantId: string; branchId: string; userId: string }> {
   const trialDays = input.trialDays ?? 14;
 
-  const result = await prisma.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({
-      data: {
-        name: input.name,
-        legalName: input.legalName ?? null,
-        document: input.document ?? null,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        address: input.address ?? null,
-        city: input.city ?? null,
-        state: input.state ?? null,
-        zipCode: input.zipCode ?? null,
-        planId: input.planId ?? null,
-        notes: input.notes ?? null,
-        trialEndsAt:
-          trialDays > 0 ? new Date(Date.now() + trialDays * 86_400_000) : null,
-      },
-    });
-
-    const branch = await tx.branch.create({
-      data: {
-        tenantId: tenant.id,
-        code: "MATRIZ",
-        name: "Matriz",
-        isHeadquarters: true,
-        status: "ATIVO",
-      },
-    });
-
-    let adminRoleId: string | null = null;
-    for (const def of DEFAULT_ROLES) {
-      const role = await tx.role.create({
+  const result = await prisma.$transaction(
+    async (tx) => {
+      const tenant = await tx.tenant.create({
         data: {
+          name: input.name,
+          legalName: input.legalName ?? null,
+          document: input.document ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          city: input.city ?? null,
+          state: input.state ?? null,
+          zipCode: input.zipCode ?? null,
+          planId: input.planId ?? null,
+          notes: input.notes ?? null,
+          trialEndsAt:
+            trialDays > 0 ? new Date(Date.now() + trialDays * 86_400_000) : null,
+        },
+      });
+
+      const branch = await tx.branch.create({
+        data: {
+          tenantId: tenant.id,
+          code: "MATRIZ",
+          name: "Matriz",
+          isHeadquarters: true,
+          status: "ATIVO",
+        },
+      });
+
+      // Perfis padrão em lote + uma leitura para localizar o administrador.
+      await tx.role.createMany({
+        data: DEFAULT_ROLES.map((def) => ({
           tenantId: tenant.id,
           name: def.name,
           description: def.description,
           permissions: def.permissions,
           system: true,
-        },
+        })),
       });
-      if (def.name === "Administrador") adminRoleId = role.id;
-    }
+      const adminRole = await tx.role.findFirst({
+        where: { tenantId: tenant.id, name: "Administrador" },
+        select: { id: true },
+      });
 
-    const user = await tx.user.create({
-      data: {
-        tenantId: tenant.id,
-        branchId: branch.id,
-        roleId: adminRoleId,
-        name: input.adminName,
-        email: input.adminEmail,
-        passwordHash: input.adminPasswordHash,
-        active: true,
-      },
-    });
-
-    // Plano de contas, conta de caixa, formas de pagamento, centro de custo e preferências
-    await createTenantFinancialDefaults(tx, { tenantId: tenant.id, branchId: branch.id, demo: input.demo });
-
-    if (input.planId) {
-      await tx.subscription.create({
+      const user = await tx.user.create({
         data: {
           tenantId: tenant.id,
-          planId: input.planId,
-          status: "TRIAL",
-          trialEndsAt: trialDays > 0 ? new Date(Date.now() + trialDays * 86_400_000) : null,
-          currentPeriodStart: new Date(),
-          currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+          branchId: branch.id,
+          roleId: adminRole?.id ?? null,
+          name: input.adminName,
+          email: input.adminEmail,
+          passwordHash: input.adminPasswordHash,
+          active: true,
         },
       });
-    }
 
-    return { tenantId: tenant.id, branchId: branch.id, userId: user.id };
-  });
+      // Plano de contas, conta de caixa, formas de pagamento, centro de custo e preferências
+      await createTenantFinancialDefaults(tx, { tenantId: tenant.id, branchId: branch.id, demo: input.demo });
+
+      if (input.planId) {
+        await tx.subscription.create({
+          data: {
+            tenantId: tenant.id,
+            planId: input.planId,
+            status: "TRIAL",
+            trialEndsAt: trialDays > 0 ? new Date(Date.now() + trialDays * 86_400_000) : null,
+            currentPeriodStart: new Date(),
+            currentPeriodEnd: new Date(Date.now() + 30 * 86_400_000),
+          },
+        });
+      }
+
+      return { tenantId: tenant.id, branchId: branch.id, userId: user.id };
+    },
+    // Provisionamento faz várias escritas em sequência em conexão remota:
+    // o limite padrão de 5s derrubava a transação no meio.
+    { maxWait: 10_000, timeout: 30_000 }
+  );
 
   return result;
 }
