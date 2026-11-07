@@ -33,6 +33,10 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
       }),
       signal: AbortSignal.timeout(15_000),
     });
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      console.error(`[email] falha no provedor (${response.status}): ${detail}`);
+    }
     return response.ok;
   } catch (error) {
     console.error("[email] falha no provedor", error);
