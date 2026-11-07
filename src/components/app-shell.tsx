@@ -372,7 +372,7 @@ export function AppShell({
       )}
 
       <div className="min-w-0 lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background/85 px-3 backdrop-blur sm:px-5">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background px-3 sm:px-5 lg:bg-background/85 lg:backdrop-blur">
           <div className="flex min-w-0 items-center gap-2">
             <Button
               variant="ghost"
@@ -398,7 +398,7 @@ export function AppShell({
             </div>
             <Link
               href="/pdv"
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+              className="inline-flex h-9 touch-manipulation items-center gap-2 rounded-lg bg-primary px-3 text-sm font-semibold text-primary-foreground shadow-sm transition-colors duration-100 hover:bg-primary/90"
             >
               <ShoppingCart className="size-4" />
               <span className="hidden sm:inline">Abrir PDV</span>

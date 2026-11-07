@@ -16,6 +16,17 @@ export const requiredText = (label: string, max = 200) =>
 
 export const idSchema = z.string().trim().min(1, "Registro inválido.");
 
+/**
+ * SKU opcional. Quando vem vazio o serviço gera um código único
+ * automaticamente (produto e variações).
+ */
+export const optionalSku = z
+  .string()
+  .trim()
+  .max(60, "SKU deve ter no máximo 60 caracteres.")
+  .optional()
+  .transform((v) => (v ? v : undefined));
+
 export const emailSchema = z
   .string()
   .trim()
@@ -210,7 +221,7 @@ export const brandSchema = z.object({
 
 export const productVariantSchema = z.object({
   id: z.string().optional(),
-  sku: requiredText("SKU", 60),
+  sku: optionalSku,
   barcode: z.string().trim().max(60).optional(),
   size: z.string().trim().max(30).optional(),
   color: z.string().trim().max(40).optional(),
@@ -224,7 +235,7 @@ export const productSchema = z.object({
   id: z.string().optional(),
   name: requiredText("Nome", 160),
   description: optionalText,
-  sku: requiredText("SKU", 60),
+  sku: optionalSku,
   barcode: z.string().trim().max(60).optional(),
   categoryId: z.string().optional(),
   brandId: z.string().optional(),

@@ -241,6 +241,90 @@ export async function getProduct(ctx: AuthContext, id: string): Promise<ProductD
   };
 }
 
+const AUTO_SKU_PREFIX = "SKU-";
+const AUTO_SKU_START = 1001;
+
+function formatAutoSku(value: number): string {
+  return `${AUTO_SKU_PREFIX}${String(value).padStart(6, "0")}`;
+}
+
+/** Próximo número sequencial de SKU, olhando produtos e variações da empresa. */
+async function nextAutoSkuNumber(tenantId: string): Promise<number> {
+  const [products, variants] = await Promise.all([
+    prisma.product.findMany({
+      where: { tenantId, sku: { startsWith: AUTO_SKU_PREFIX } },
+      select: { sku: true },
+    }),
+    prisma.productVariant.findMany({
+      where: { tenantId, sku: { startsWith: AUTO_SKU_PREFIX } },
+      select: { sku: true },
+    }),
+  ]);
+  let max = AUTO_SKU_START - 1;
+  for (const row of [...products, ...variants]) {
+    const match = /^SKU-(\d+)$/.exec(row.sku.toUpperCase());
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return max + 1;
+}
+
+/** Gera um SKU de produto único (ex.: SKU-001001), evitando os já reservados. */
+async function generateProductSku(tenantId: string, reserved: Set<string>): Promise<string> {
+  let next = await nextAutoSkuNumber(tenantId);
+  while (reserved.has(formatAutoSku(next))) next += 1;
+  return formatAutoSku(next);
+}
+
+/**
+ * Resolve o SKU de cada variação: mantém o código atual de variações
+ * existentes e gera códigos derivados do produto (ex.: SKU-001001-01) para as
+ * novas. Assim o cadastro funciona sem o usuário digitar nada.
+ */
+async function resolveVariantSkus(
+  tenantId: string,
+  productSku: string,
+  variants: ProductInput["variants"],
+  existingVariants: Array<{ id: string; sku: string }> | undefined,
+  reserved: Set<string>
+): Promise<string[]> {
+  const prefix = `${productSku.slice(0, 54)}-`;
+  const [productRows, variantRows] = await Promise.all([
+    prisma.product.findMany({
+      where: { tenantId, sku: { startsWith: prefix } },
+      select: { sku: true },
+    }),
+    prisma.productVariant.findMany({
+      where: { tenantId, sku: { startsWith: prefix } },
+      select: { sku: true },
+    }),
+  ]);
+
+  const taken = new Set(reserved);
+  for (const row of [...productRows, ...variantRows]) taken.add(row.sku.toUpperCase());
+
+  let counter = 1;
+  return variants.map((variant) => {
+    if (variant.sku) return variant.sku;
+
+    const current = variant.id
+      ? existingVariants?.find((item) => item.id === variant.id)
+      : undefined;
+    if (current) {
+      taken.add(current.sku.toUpperCase());
+      return current.sku;
+    }
+
+    let candidate = `${prefix}${String(counter).padStart(2, "0")}`;
+    while (taken.has(candidate.toUpperCase())) {
+      counter += 1;
+      candidate = `${prefix}${String(counter).padStart(2, "0")}`;
+    }
+    counter += 1;
+    taken.add(candidate.toUpperCase());
+    return candidate;
+  });
+}
+
 async function assertUniqueProductKeys(
   tenantId: string,
   sku: string,
@@ -337,11 +421,37 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
     }
   }
 
+  // SKUs digitados manualmente têm prioridade na resolução dos automáticos.
+  const reservedSkus = new Set<string>();
+  for (const variant of input.variants) {
+    if (variant.sku) reservedSkus.add(variant.sku.toUpperCase());
+  }
+  if (input.sku) reservedSkus.add(input.sku.toUpperCase());
+
+  const productSku = input.sku
+    ? input.sku.toUpperCase()
+    : existing
+      ? existing.sku
+      : await generateProductSku(ctx.tenantId, reservedSkus);
+  reservedSkus.add(productSku.toUpperCase());
+
+  const variantSkus = await resolveVariantSkus(
+    ctx.tenantId,
+    productSku,
+    input.variants,
+    existing?.variants,
+    reservedSkus
+  );
+  const variantsWithSku = input.variants.map((variant, index) => ({
+    ...variant,
+    sku: variantSkus[index] ?? productSku,
+  }));
+
   await assertUniqueProductKeys(
     ctx.tenantId,
-    input.sku,
+    productSku,
     input.barcode,
-    input.variants,
+    variantsWithSku,
     existing?.id,
     existing?.variants.map((v) => v.id) ?? []
   );
@@ -356,7 +466,7 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
       tenantId: ctx.tenantId,
       name: input.name,
       description: input.description ?? null,
-      sku: input.sku.toUpperCase(),
+      sku: productSku,
       barcode: input.barcode?.trim() || null,
       categoryId: input.categoryId || null,
       brandId: input.brandId || null,
@@ -384,7 +494,7 @@ export async function saveProduct(ctx: AuthContext, raw: unknown): Promise<{ id:
 
     const keptVariantIds: string[] = [];
 
-    for (const variant of input.hasVariants ? input.variants : []) {
+    for (const variant of input.hasVariants ? variantsWithSku : []) {
       const variantData = {
         tenantId: ctx.tenantId,
         productId: product.id,

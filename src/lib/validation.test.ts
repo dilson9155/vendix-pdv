@@ -106,6 +106,22 @@ describe("schemas de formulários", () => {
     expect(parsed.success && parsed.data.price).toBe(19.9);
   });
 
+  it("aceita produto sem SKU para geração automática", () => {
+    const parsed = productSchema.safeParse({ ...productBase, sku: "" });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.sku).toBeUndefined();
+  });
+
+  it("aceita variação sem SKU para geração automática", () => {
+    const parsed = productSchema.safeParse({
+      ...productBase,
+      hasVariants: true,
+      variants: [{ sku: "", barcode: "", size: "M", color: "Azul" }],
+    });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.variants[0]?.sku).toBeUndefined();
+  });
+
   it("rejeita custo inválido com mensagem amigável", () => {
     const parsed = productSchema.safeParse({ ...productBase, cost: "abc" });
     expect(parsed.success).toBe(false);

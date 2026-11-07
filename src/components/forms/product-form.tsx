@@ -148,10 +148,6 @@ export function ProductDialog({
       setError("Cadastre ao menos uma variação ou desative a opção de variações.");
       return;
     }
-    if (hasVariants && variants.some((variant) => !variant.sku.trim())) {
-      setError("Toda variação precisa de um SKU.");
-      return;
-    }
 
     const value = (name: string) => {
       const raw = data.get(name);
@@ -226,7 +222,7 @@ export function ProductDialog({
           <DialogTitle>{product ? "Editar produto" : "Novo produto"}</DialogTitle>
           <DialogDescription>
             Produtos com variações (cor/tamanho) têm estoque e código de barras por variação. O
-            preço promocional vale no período informado.
+            preço promocional vale no período informado. SKUs em branco são gerados automaticamente.
           </DialogDescription>
         </DialogHeader>
 
@@ -235,8 +231,27 @@ export function ProductDialog({
             <Field label="Nome" htmlFor="product-name" className="sm:col-span-2">
               <input id="product-name" name="name" defaultValue={product?.name} className={inputClass} required maxLength={160} autoFocus />
             </Field>
-            <Field label="SKU" htmlFor="product-sku" hint="Identificador interno único.">
-              <input id="product-sku" name="sku" defaultValue={product?.sku} className={inputClass} required maxLength={60} />
+            <Field
+              label="SKU"
+              htmlFor="product-sku"
+              optional
+              hint={
+                product
+                  ? "Identificador interno único. Deixe em branco para manter o atual."
+                  : "Deixe em branco e o sistema gera um código único automaticamente."
+              }
+            >
+              <input
+                id="product-sku"
+                name="sku"
+                defaultValue={product?.sku}
+                className={inputClass}
+                maxLength={60}
+                placeholder={product ? undefined : "Automático"}
+                autoCapitalize="off"
+                autoComplete="off"
+                spellCheck={false}
+              />
             </Field>
             <Field label="Código de barras" htmlFor="product-barcode" optional hint="Para produtos com variações, prefira o código por variação.">
               <div className="flex gap-2">
@@ -384,7 +399,8 @@ export function ProductDialog({
                 <div>
                   <h3 className="text-xs font-semibold">Variações</h3>
                   <p className="text-[11px] text-muted-foreground">
-                    Estoque, preço e código de barras são controlados por variação.
+                    Estoque, preço e código de barras são controlados por variação. SKU em branco
+                    é gerado a partir do código do produto.
                   </p>
                 </div>
                 <Button type="button" size="sm" variant="outline" onClick={() => setVariants((current) => [...current, newVariant()])}>
@@ -397,7 +413,7 @@ export function ProductDialog({
                     <div className="grid gap-2 sm:grid-cols-8">
                       <div className="sm:col-span-2">
                         <label className="mb-0.5 block text-[10px] text-muted-foreground">SKU</label>
-                        <input value={variant.sku} onChange={(event) => updateVariant(variant.key, { sku: event.target.value })} className="h-8 w-full rounded-md border bg-background px-2 text-xs" required maxLength={60} aria-label={`SKU da variação ${index + 1}`} />
+                        <input value={variant.sku} onChange={(event) => updateVariant(variant.key, { sku: event.target.value })} className="h-8 w-full rounded-md border bg-background px-2 text-xs" maxLength={60} placeholder="Automático" autoCapitalize="off" spellCheck={false} aria-label={`SKU da variação ${index + 1}`} />
                       </div>
                       <div className="sm:col-span-2">
                         <label className="mb-0.5 block text-[10px] text-muted-foreground">Código de barras</label>
