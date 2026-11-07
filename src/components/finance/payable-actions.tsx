@@ -101,7 +101,7 @@ export function PayableActions({
             type="button"
             size="sm"
             variant="ghost"
-            disabled={pendingId !== null}
+            disabled={pendingId}
             onClick={() => reversePayment(payment.id)}
           >
             {pendingId ? <Loader2 className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
