@@ -90,7 +90,7 @@ export function NoticesManager({
                     <td>
                       <StatusBadge status={notice.active ? "ATIVO" : "INATIVO"} />
                     </td>
-                    <td>{notice.expiresAt ? new Date(notice.expiresAt).toISOString().slice(0, 10) : "—"}</td>
+                    <td>{notice.expiresAt ? new Date(notice.expiresAt).toISOString().slice(0, 10).split("-").reverse().join("-") : "—"}</td>
                     <td>
                       <Button size="sm" variant="outline" onClick={() => openEdit(notice)}>
                         Editar

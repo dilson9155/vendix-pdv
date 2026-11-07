@@ -56,7 +56,7 @@ export default async function TransfersPage() {
             <tbody>
               {transfers.map((transfer) => (
                 <tr key={transfer.id}>
-                  <td>{new Date(transfer.date).toISOString().slice(0, 10)}</td>
+                  <td>{new Date(transfer.date).toISOString().slice(0, 10).split("-").reverse().join("-")}</td>
                   <td>{transfer.fromAccount.name}</td>
                   <td>{transfer.toAccount.name}</td>
                   <td>{transfer.description}</td>

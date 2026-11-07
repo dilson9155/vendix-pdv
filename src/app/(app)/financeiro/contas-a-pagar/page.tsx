@@ -171,8 +171,8 @@ export default async function PayablesPage({
                     {row.document && <p className="text-[11px] text-muted-foreground">Doc. {row.document}</p>}
                   </td>
                   <td>{row.supplierName ?? "—"}</td>
-                  <td>{row.competenceDate}</td>
-                  <td>{row.dueDate}</td>
+                  <td>{row.competenceDate.split("-").reverse().join("-")}</td>
+                  <td>{row.dueDate.split("-").reverse().join("-")}</td>
                   <td className="num font-semibold">{formatBRL(row.value)}</td>
                   <td className="num">{formatBRL(row.paid)}</td>
                   <td className="num font-semibold">{formatBRL(row.balance)}</td>

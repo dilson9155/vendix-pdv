@@ -68,7 +68,7 @@ export default async function SettingsPage() {
                   <tbody>
                     {logs.map((log) => (
                       <tr key={log.id}>
-                        <td>{new Date(log.createdAt).toISOString().slice(0, 10)}</td>
+                        <td>{new Date(log.createdAt).toISOString().slice(0, 10).split("-").reverse().join("-")}</td>
                         <td>{log.status}</td>
                         <td>{log.provider}</td>
                         <td className="max-w-72 truncate">{log.error ?? log.messageId ?? "—"}</td>

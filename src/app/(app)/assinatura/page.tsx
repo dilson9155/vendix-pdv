@@ -45,7 +45,7 @@ export default async function SubscriptionPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Plano" value={company.plan?.name ?? "—"} />
         <StatCard label="Status" value={subscription?.status ?? "TRIAL"} />
-        <StatCard label="Trial" value={subscription?.trialEndsAt ? new Date(subscription.trialEndsAt).toISOString().slice(0, 10) : "—"} />
+        <StatCard label="Trial" value={subscription?.trialEndsAt ? new Date(subscription.trialEndsAt).toISOString().slice(0, 10).split("-").reverse().join("-") : "—"} />
         <StatCard
           label="Em aberto"
           value={formatBRL(openTotal)}
@@ -154,7 +154,7 @@ export default async function SubscriptionPage() {
           <div className="rounded-lg border bg-background px-3 py-2">
             <dt className="text-xs text-muted-foreground">Ciclo da assinatura</dt>
             <dd className="mt-0.5 font-semibold">
-              {subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toISOString().slice(0, 10) : "—"}
+              {subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd).toISOString().slice(0, 10).split("-").reverse().join("-") : "—"}
             </dd>
           </div>
         </div>
