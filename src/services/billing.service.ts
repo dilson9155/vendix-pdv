@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/tenant";
 import { auditLog } from "@/services/audit.service";
 import { platformConfigSchema } from "@/lib/validation";
-import { buildPixPayload, detectPixKeyType, type PixKeyType } from "@/lib/pix";
+import { buildPixPayload, detectPixKeyType, isPixKeyType, type PixKeyType } from "@/lib/pix";
 import { formatDateBR, startOfBusinessDay } from "@/lib/date";
 
 function assertPlatform(ctx: AuthContext): void {
@@ -131,13 +131,25 @@ export function pixForCharge(charge: PixChargeSource, config: BillingConfig): Pi
   const amount = Number(charge.amount.toString());
   const txid = `VX${charge.publicToken.replace(/[^A-Za-z0-9]/g, "").slice(0, 20)}`;
 
+  // Usa o tipo cadastrado quando a chave da cobrança é a mesma da configuração.
+  // Isso evita confundir CPF (11 dígitos) com telefone e normaliza a chave
+  // para o formato exigido no BR Code (CPF/CNPJ somente dígitos).
+  const configuredType = isPixKeyType(config.pixKeyType) ? config.pixKeyType : null;
+  const chargeKey = charge.pixKey?.trim();
+  const configKey = config.pixKey?.trim();
+  const keyType =
+    configuredType && (!chargeKey || (configKey && chargeKey === configKey))
+      ? configuredType
+      : detectPixKeyType(key);
+
   return {
     key,
-    keyType: detectPixKeyType(key),
+    keyType,
     beneficiary,
     city,
     payload: buildPixPayload({
       key,
+      keyType,
       amount,
       merchantName: beneficiary,
       merchantCity: city,
