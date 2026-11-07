@@ -13,7 +13,7 @@ import {
   startOfBusinessDay,
   todayISO,
 } from "@/lib/date";
-import { payableSchema } from "@/lib/validation";
+import { numberInput, payableSchema } from "@/lib/validation";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -450,10 +450,10 @@ const paySchema = z.object({
   id: z.string().min(1),
   financialAccountId: z.string().min(1, "Informe a conta financeira."),
   date: z.string().min(10),
-  amount: z.coerce.number().positive("Informe um valor maior que zero."),
-  interest: z.coerce.number().min(0).default(0),
-  penalty: z.coerce.number().min(0).default(0),
-  discount: z.coerce.number().min(0).default(0),
+  amount: numberInput({ label: "Valor", gt: 0 }),
+  interest: numberInput({ label: "Juros", min: 0, fallback: 0 }),
+  penalty: numberInput({ label: "Multa", min: 0, fallback: 0 }),
+  discount: numberInput({ label: "Desconto", min: 0, fallback: 0 }),
   method: z.string().trim().max(40).optional(),
   document: z.string().trim().max(60).optional(),
   notes: z.string().trim().max(300).optional(),

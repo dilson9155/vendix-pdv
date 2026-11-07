@@ -583,6 +583,45 @@ export type PosProduct = {
   variantLabel: string | null;
 };
 
+export type BarcodeLookupResult =
+  | { exists: false }
+  | { exists: true; productId: string; name: string; active: boolean };
+
+/**
+ * Verifica se um código já está cadastrado na empresa (produto, variação ou
+ * código alternativo). Usado pelo formulário de produtos após leitura por câmera.
+ */
+export async function lookupBarcode(
+  ctx: AuthContext,
+  rawCode: string
+): Promise<BarcodeLookupResult> {
+  assertPermission(ctx, "products.view");
+  const code = rawCode.trim();
+  if (!code) return { exists: false };
+
+  const [product, variant, alt] = await Promise.all([
+    prisma.product.findFirst({
+      where: { tenantId: ctx.tenantId, barcode: code },
+      select: { id: true, name: true, active: true },
+    }),
+    prisma.productVariant.findFirst({
+      where: { tenantId: ctx.tenantId, barcode: code },
+      select: { product: { select: { id: true, name: true, active: true } } },
+    }),
+    prisma.productBarcode.findFirst({
+      where: { tenantId: ctx.tenantId, code },
+      select: {
+        product: { select: { id: true, name: true, active: true } },
+        variant: { select: { product: { select: { id: true, name: true, active: true } } } },
+      },
+    }),
+  ]);
+
+  const hit = product ?? variant?.product ?? alt?.product ?? alt?.variant?.product ?? null;
+  if (!hit) return { exists: false };
+  return { exists: true, productId: hit.id, name: hit.name, active: hit.active };
+}
+
 export async function findByBarcode(
   ctx: AuthContext,
   code: string,

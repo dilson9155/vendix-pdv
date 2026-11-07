@@ -27,18 +27,114 @@ export const optionalEmail = z
   .optional()
   .transform((v) => (v ? v : undefined));
 
-export const moneyInput = z
-  .union([z.string(), z.number()])
-  .transform((v) => (typeof v === "string" ? Number(v.replace(/\./g, "").replace(",", ".")) : v))
-  .pipe(z.number().finite("Valor inválido."))
-  .refine((v) => v >= 0, "O valor não pode ser negativo.");
+/**
+ * Normaliza texto numérico aceitando os formatos usados no Brasil e no exterior:
+ * "10,50", "10.50", "1.234,56", "1,234.56", "R$ 10,00".
+ * Retorna `null` quando o texto não é um número válido.
+ */
+export function normalizeDecimalText(value: string): string | null {
+  const compact = value
+    .replace(/R\$\s*/gi, "")
+    .replace(/\s|\u00a0/g, "")
+    .trim();
+  if (!compact) return "";
 
-export const positiveMoneyInput = moneyInput.refine((v) => v > 0, "Informe um valor maior que zero.");
+  const hasComma = compact.includes(",");
+  const hasDot = compact.includes(".");
 
-export const quantityInput = z
-  .union([z.string(), z.number()])
-  .transform((v) => (typeof v === "string" ? Number(v.replace(",", ".")) : v))
-  .pipe(z.number().finite("Quantidade inválida."));
+  if (hasComma && hasDot) {
+    // O separador decimal é o que aparece por último.
+    return compact.lastIndexOf(",") > compact.lastIndexOf(".")
+      ? compact.replace(/\./g, "").replace(/,/g, ".")
+      : compact.replace(/,/g, "");
+  }
+  if (hasComma) return compact.replace(/,/g, ".");
+  if (hasDot) {
+    // "1.234" e "1.234.567" são separadores de milhar; "10.50" é decimal.
+    return /^[+-]?\d{1,3}(\.\d{3})+$/.test(compact) ? compact.replace(/\./g, "") : compact;
+  }
+  return compact;
+}
+
+/**
+ * Converte um valor de formulário em número.
+ * - `undefined`, `null` e texto vazio → `undefined` (campo não informado)
+ * - texto inválido ou `NaN` → `null` (valor rejeitado)
+ */
+export function parseDecimal(value: unknown): number | null | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+
+  const normalized = normalizeDecimalText(value);
+  if (normalized === "") return undefined;
+  if (normalized === null || !/^[+-]?\d+(\.\d+)?$/.test(normalized)) return null;
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+type NumberInputOptions = {
+  /** Nome do campo, usado nas mensagens de erro. */
+  label: string;
+  /** Campo opcional: vazio vira `undefined` em vez de erro. */
+  optional?: boolean;
+  /** Valor assumido quando o campo vem vazio (ex.: 0 em campos com padrão). */
+  fallback?: number;
+  min?: number;
+  /** Exige valor estritamente maior que este número (ex.: 0 para "maior que zero"). */
+  gt?: number;
+  max?: number;
+  integer?: boolean;
+  /** Mensagem personalizada para conteúdo não numérico. */
+  message?: string;
+};
+
+/**
+ * Campo numérico tolerante a formulários: aceita string com vírgula ou ponto,
+ * converte antes de validar e nunca deixa `NaN` chegar ao serviço/banco.
+ */
+export function numberInput<const O extends NumberInputOptions>(
+  options: O
+): z.ZodType<O extends { optional: true } ? number | undefined : number> {
+  const { label, optional, fallback, min, gt, max, integer, message } = options;
+  const invalidMessage = message ?? `${label}: informe um número válido (ex.: 10,50).`;
+
+  const core = z
+    .number({ error: invalidMessage })
+    .refine((v) => min === undefined || v >= min, `${label} não pode ser menor que ${min ?? 0}.`)
+    .refine((v) => gt === undefined || v > gt, `${label} deve ser maior que ${gt ?? 0}.`)
+    .refine((v) => max === undefined || v <= max, `${label} não pode ser maior que ${max ?? 0}.`)
+    .refine((v) => !integer || Number.isInteger(v), `${label} deve ser um número inteiro.`);
+
+  // O preprocess converte antes de validar: campos vazios/ausentes usam
+  // `fallback` (ou viram `undefined` em campos opcionais) e textos inválidos
+  // viram NaN, que o schema rejeita com mensagem amigável — nunca é validado.
+  const schema = z.preprocess((value) => {
+    const parsed = parseDecimal(value);
+    if (parsed === undefined) return fallback;
+    return parsed === null ? Number.NaN : parsed;
+  }, optional ? core.optional() : core);
+
+  return schema as unknown as z.ZodType<O extends { optional: true } ? number | undefined : number>;
+}
+
+export const moneyInput = numberInput({
+  label: "Valor",
+  min: 0,
+  message: "Valor inválido. Informe um número, por exemplo 10,50.",
+});
+
+export const positiveMoneyInput = numberInput({
+  label: "Valor",
+  gt: 0,
+  message: "Valor inválido. Informe um número, por exemplo 10,50.",
+});
+
+export const quantityInput = numberInput({
+  label: "Quantidade",
+  message: "Quantidade inválida. Informe um número, por exemplo 2,5.",
+});
 
 export const dateInput = z
   .string()
@@ -119,8 +215,8 @@ export const productVariantSchema = z.object({
   size: z.string().trim().max(30).optional(),
   color: z.string().trim().max(40).optional(),
   model: z.string().trim().max(60).optional(),
-  cost: z.coerce.number().min(0).optional(),
-  price: z.coerce.number().min(0).optional(),
+  cost: numberInput({ label: "Custo", min: 0, optional: true }),
+  price: numberInput({ label: "Preço", min: 0, optional: true }),
   active: z.boolean().default(true),
 });
 
@@ -134,13 +230,13 @@ export const productSchema = z.object({
   brandId: z.string().optional(),
   supplierId: z.string().optional(),
   unit: z.enum(["UN", "KG", "LT", "MT", "CX", "PCT"]).default("UN"),
-  cost: z.coerce.number().min(0, "Custo inválido."),
-  price: z.coerce.number().min(0, "Preço inválido."),
-  promoPrice: z.coerce.number().min(0).optional(),
+  cost: numberInput({ label: "Custo", min: 0 }),
+  price: numberInput({ label: "Preço", min: 0 }),
+  promoPrice: numberInput({ label: "Preço promocional", min: 0, optional: true }),
   promoStart: optionalDateInput,
   promoEnd: optionalDateInput,
-  minStock: z.coerce.number().min(0).default(0),
-  maxStock: z.coerce.number().min(0).optional(),
+  minStock: numberInput({ label: "Estoque mínimo", min: 0, fallback: 0 }),
+  maxStock: numberInput({ label: "Estoque máximo", min: 0, optional: true }),
   ncm: z.string().trim().max(10).optional(),
   cest: z.string().trim().max(10).optional(),
   origin: z.string().trim().max(10).optional(),
@@ -156,8 +252,11 @@ export const stockMovementSchema = z.object({
   productId: idSchema,
   variantId: z.string().optional(),
   type: z.enum(["ENTRADA", "SAIDA", "AJUSTE", "TRANSFERENCIA", "INVENTARIO"]),
-  quantity: z.coerce.number().refine((v) => v !== 0, "Informe uma quantidade diferente de zero."),
-  unitCost: z.coerce.number().min(0).optional(),
+  quantity: numberInput({
+    label: "Quantidade",
+    message: "Quantidade inválida. Informe um número, por exemplo 2,5.",
+  }).refine((v) => v !== 0, "Informe uma quantidade diferente de zero."),
+  unitCost: numberInput({ label: "Custo unitário", min: 0, optional: true }),
   reason: requiredText("Motivo", 300),
   document: z.string().trim().max(60).optional(),
 });
@@ -167,22 +266,22 @@ export const stockTransferSchema = z.object({
   toBranchId: idSchema,
   productId: idSchema,
   variantId: z.string().optional(),
-  quantity: z.coerce.number().positive("Informe uma quantidade maior que zero."),
+  quantity: numberInput({ label: "Quantidade", gt: 0 }),
   reason: optionalText,
 });
 
 export const cartItemSchema = z.object({
   productId: idSchema,
   variantId: z.string().optional(),
-  quantity: z.coerce.number().positive("Quantidade inválida."),
-  unitPrice: z.coerce.number().min(0),
-  discount: z.coerce.number().min(0).default(0),
+  quantity: numberInput({ label: "Quantidade", gt: 0 }),
+  unitPrice: numberInput({ label: "Preço unitário", min: 0 }),
+  discount: numberInput({ label: "Desconto", min: 0, fallback: 0 }),
 });
 
 export const salePaymentSchema = z.object({
   paymentMethodId: idSchema,
-  amount: z.coerce.number().positive("Valor do pagamento inválido."),
-  installments: z.coerce.number().int().min(1).max(36).default(1),
+  amount: numberInput({ label: "Valor do pagamento", gt: 0 }),
+  installments: numberInput({ label: "Parcelas", integer: true, fallback: 1, min: 1, max: 36 }),
   notes: z.string().trim().max(300).optional(),
 });
 
@@ -192,7 +291,7 @@ export const saleSchema = z.object({
   customerId: z.string().optional(),
   items: z.array(cartItemSchema).min(1, "Adicione ao menos um item."),
   payments: z.array(salePaymentSchema).default([]),
-  discount: z.coerce.number().min(0).default(0),
+  discount: numberInput({ label: "Desconto", min: 0, fallback: 0 }),
   notes: z.string().trim().max(500).optional(),
   idempotencyKey: z.string().trim().min(8).max(64),
 });
@@ -200,20 +299,20 @@ export const saleSchema = z.object({
 export const cashOpenSchema = z.object({
   branchId: idSchema,
   terminalName: requiredText("Terminal", 60),
-  openingAmount: z.coerce.number().min(0),
+  openingAmount: numberInput({ label: "Fundo de troco", min: 0, fallback: 0 }),
   notes: z.string().trim().max(300).optional(),
 });
 
 export const cashMovementSchema = z.object({
   sessionId: idSchema,
   type: z.enum(["SUPRIMENTO", "SANGRIA"]),
-  amount: z.coerce.number().positive("Informe um valor maior que zero."),
+  amount: numberInput({ label: "Valor", gt: 0 }),
   reason: requiredText("Motivo", 200),
 });
 
 export const cashCloseSchema = z.object({
   sessionId: idSchema,
-  countedCash: z.coerce.number().min(0),
+  countedCash: numberInput({ label: "Valor contado", min: 0, fallback: 0 }),
   notes: z.string().trim().max(300).optional(),
 });
 
@@ -229,7 +328,7 @@ export const payableSchema = z.object({
   competenceDate: dateInput,
   dueDate: dateInput,
   value: positiveMoneyInput,
-  installments: z.coerce.number().int().min(1).max(36).default(1),
+  installments: numberInput({ label: "Parcelas", integer: true, fallback: 1, min: 1, max: 36 }),
   notes: z.string().trim().max(500).optional(),
 });
 
@@ -245,7 +344,7 @@ export const receivableSchema = z.object({
   competenceDate: dateInput,
   dueDate: dateInput,
   value: positiveMoneyInput,
-  installments: z.coerce.number().int().min(1).max(36).default(1),
+  installments: numberInput({ label: "Parcelas", integer: true, fallback: 1, min: 1, max: 36 }),
   notes: z.string().trim().max(500).optional(),
 });
 
@@ -253,10 +352,10 @@ export const settlementSchema = z.object({
   id: idSchema,
   financialAccountId: idSchema,
   date: dateInput,
-  amount: z.coerce.number().positive("Informe um valor maior que zero."),
-  interest: z.coerce.number().min(0).default(0),
-  penalty: z.coerce.number().min(0).default(0),
-  discount: z.coerce.number().min(0).default(0),
+  amount: numberInput({ label: "Valor", gt: 0 }),
+  interest: numberInput({ label: "Juros", min: 0, fallback: 0 }),
+  penalty: numberInput({ label: "Multa", min: 0, fallback: 0 }),
+  discount: numberInput({ label: "Desconto", min: 0, fallback: 0 }),
   method: z.string().trim().max(40).optional(),
   document: z.string().trim().max(60).optional(),
   notes: z.string().trim().max(300).optional(),
@@ -275,7 +374,7 @@ export const financialAccountSchema = z.object({
   bankName: z.string().trim().max(80).optional(),
   agency: z.string().trim().max(20).optional(),
   accountNumber: z.string().trim().max(30).optional(),
-  initialBalance: z.coerce.number().min(0).default(0),
+  initialBalance: numberInput({ label: "Saldo inicial", min: 0, fallback: 0 }),
   initialBalanceDate: dateInput,
   active: z.boolean().default(true),
 });
@@ -337,7 +436,7 @@ export const settingsSchema = z.object({
   receiptFooter: z.string().trim().max(300).optional(),
   receiptWidth: z.enum(["58", "80"]).default("80"),
   allowNegativeStock: z.boolean().default(false),
-  maxDiscountPercent: z.coerce.number().min(0).max(100).default(10),
+  maxDiscountPercent: numberInput({ label: "Desconto máximo (%)", min: 0, max: 100, fallback: 10 }),
   requireCustomerOnCredit: z.boolean().default(true),
 });
 
@@ -346,11 +445,11 @@ export const planSchema = z.object({
   code: requiredText("Código", 30),
   name: requiredText("Nome", 80),
   description: z.string().trim().max(300).optional(),
-  price: z.coerce.number().min(0),
-  trialDays: z.coerce.number().int().min(0).max(365).default(14),
-  maxUsers: z.coerce.number().int().min(1).optional(),
-  maxBranches: z.coerce.number().int().min(1).optional(),
-  maxProducts: z.coerce.number().int().min(1).optional(),
+  price: numberInput({ label: "Preço", min: 0 }),
+  trialDays: numberInput({ label: "Dias de teste", integer: true, min: 0, max: 365, fallback: 14 }),
+  maxUsers: numberInput({ label: "Máximo de usuários", integer: true, min: 1, optional: true }),
+  maxBranches: numberInput({ label: "Máximo de filiais", integer: true, min: 1, optional: true }),
+  maxProducts: numberInput({ label: "Máximo de produtos", integer: true, min: 1, optional: true }),
 });
 
 export const tenantSchema = z.object({
@@ -368,7 +467,7 @@ export const tenantSchema = z.object({
   adminName: requiredText("Responsável", 120),
   adminEmail: emailSchema,
   adminPassword: z.string().min(8, "A senha deve ter ao menos 8 caracteres."),
-  trialDays: z.coerce.number().int().min(0).max(90).default(14),
+  trialDays: numberInput({ label: "Dias de teste", integer: true, min: 0, max: 90, fallback: 14 }),
 });
 
 export const tenantUpdateSchema = z.object({
@@ -433,8 +532,8 @@ export const platformConfigSchema = z.object({
   pixCity: z.string().trim().max(40).optional(),
   boletoInstructions: z.string().trim().max(2000).optional(),
   supportWhatsapp: z.string().trim().max(20).optional(),
-  billingDueDay: z.coerce.number().int().min(1).max(28).default(10),
-  graceDays: z.coerce.number().int().min(0).max(120).default(5),
+  billingDueDay: numberInput({ label: "Dia de vencimento", integer: true, min: 1, max: 28, fallback: 10 }),
+  graceDays: numberInput({ label: "Dias de carência", integer: true, min: 0, max: 120, fallback: 5 }),
   autoSuspend: z.boolean().default(false),
 });
 

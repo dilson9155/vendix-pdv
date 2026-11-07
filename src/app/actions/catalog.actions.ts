@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { runAction, type ActionResult } from "@/lib/action-result";
 import { actionContext } from "@/app/actions/_context";
 import {
+  lookupBarcode,
   saveBrand,
   saveCategory,
   saveProduct,
   setProductActive,
+  type BarcodeLookupResult,
 } from "@/services/catalog.service";
 import {
   saveCustomer,
@@ -24,6 +26,16 @@ export async function saveProductAction(raw: unknown): Promise<ActionResult<{ id
     revalidatePath("/estoque");
     revalidatePath("/pdv");
     return result;
+  });
+}
+
+/** Consulta usada pelo formulário após leitura por câmera: o código já existe? */
+export async function checkBarcodeAction(
+  code: string
+): Promise<ActionResult<BarcodeLookupResult>> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    return lookupBarcode(ctx, code);
   });
 }
 

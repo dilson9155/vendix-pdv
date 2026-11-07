@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Banknote,
+  Camera,
   CheckCircle2,
   Download,
   Loader2,
@@ -19,18 +20,27 @@ import {
   UserRound,
   X,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatBRL } from "@/lib/money";
+import { parseDecimal } from "@/lib/validation";
 import { downloadImageUrl, shareImageUrl } from "@/lib/share-image";
 import type { PosProduct } from "@/services/catalog.service";
+import type { ScanOutcome } from "@/components/barcode/barcode-scanner";
 import {
   barcodeLookupAction,
   searchCustomersAction,
   searchPdvProductsAction,
 } from "@/app/actions/pos.actions";
 import { createSaleAction, openCashAction, shareReceiptAction } from "@/app/actions/sales.actions";
+
+// Leitor de câmera carregado sob demanda (só quando o operador abrir a câmera).
+const BarcodeScanner = dynamic(
+  () => import("@/components/barcode/barcode-scanner").then((module) => module.BarcodeScanner),
+  { ssr: false }
+);
 
 type PaymentMethod = {
   id: string;
@@ -91,6 +101,8 @@ export function PdvTerminal({
   const [term, setTerm] = useState("");
   const [results, setResults] = useState<PosProduct[]>([]);
   const [searching, setSearching] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [continuousScan, setContinuousScan] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [customerId, setCustomerId] = useState("");
@@ -120,10 +132,10 @@ export function PdvTerminal({
     () => cart.reduce((sum, item) => sum + (item.discount || 0), 0),
     [cart]
   );
-  const discount = Math.min(Number(globalDiscount.replace(",", ".")) || 0, subtotal);
+  const discount = Math.min(parseDecimal(globalDiscount) ?? 0, subtotal);
   const total = Math.max(0, subtotal - discount);
   const paid = useMemo(
-    () => payments.reduce((sum, line) => sum + (Number(line.amount.replace(",", ".")) || 0), 0),
+    () => payments.reduce((sum, line) => sum + (parseDecimal(line.amount) ?? 0), 0),
     [payments]
   );
   const missing = Math.max(0, total - paid);
@@ -135,7 +147,7 @@ export function PdvTerminal({
   const creditNeedsCustomer = hasCredit && requireCustomerOnCredit && !customerId;
   const maxDiscountValue = (subtotal * maxDiscountPercent) / 100;
 
-  function addProduct(product: PosProduct) {
+  function addProduct(product: PosProduct, focusSearch = true) {
     cancelProductSearch();
     setCart((current) => {
       const existing = current.find(
@@ -150,7 +162,29 @@ export function PdvTerminal({
     });
     setTerm("");
     setResults([]);
-    searchInput.current?.focus();
+    if (focusSearch) searchInput.current?.focus();
+  }
+
+  /** Processa um código lido pela câmera: adiciona ao carrinho ou informa o motivo da recusa. */
+  async function handleCameraScan(code: string): Promise<ScanOutcome> {
+    cancelProductSearch();
+    setSearching(true);
+    const result = await barcodeLookupAction(code, branchId ?? undefined);
+    setSearching(false);
+    setTerm("");
+    setResults([]);
+    if (!result.ok) return { ok: false, message: result.error, close: false };
+    if (!result.data) {
+      return { ok: false, message: "Produto não cadastrado", close: false };
+    }
+    setError(null);
+    addProduct(result.data, false);
+    const label = result.data.name;
+    return {
+      ok: true,
+      message: continuousScan ? `${label} adicionado ao carrinho` : "Produto adicionado ao carrinho",
+      close: !continuousScan,
+    };
   }
 
   function cancelProductSearch() {
@@ -250,7 +284,7 @@ export function PdvTerminal({
       if (!base.length) return base;
       const others = base
         .slice(0, -1)
-        .reduce((sum, line) => sum + (Number(line.amount.replace(",", ".")) || 0), 0);
+        .reduce((sum, line) => sum + (parseDecimal(line.amount) ?? 0), 0);
       base[base.length - 1] = {
         ...base[base.length - 1],
         amount: Math.max(0, total - others).toFixed(2),
@@ -274,7 +308,7 @@ export function PdvTerminal({
       return;
     }
     const validPayments = payments.filter(
-      (line) => Number(line.amount.replace(",", ".")) > 0 && line.methodId
+      (line) => (parseDecimal(line.amount) ?? 0) > 0 && line.methodId
     );
     if (!validPayments.length) {
       setError("Informe ao menos uma forma de pagamento.");
@@ -299,7 +333,7 @@ export function PdvTerminal({
         })),
         payments: validPayments.map((line) => ({
           paymentMethodId: line.methodId,
-          amount: Number(line.amount.replace(",", ".")),
+          amount: parseDecimal(line.amount) ?? 0,
           installments: line.installments,
         })),
         discount: discount,
@@ -386,7 +420,7 @@ export function PdvTerminal({
               const result = await openCashAction({
                 branchId: openBranch,
                 terminalName: openTerminal,
-                openingAmount: Number(openAmount.replace(",", ".")) || 0,
+                openingAmount: parseDecimal(openAmount) ?? 0,
               });
               if (!result.ok) setError(result.error);
               else router.refresh();
@@ -432,6 +466,14 @@ export function PdvTerminal({
                 type="button"
                 variant="outline"
                 className="h-11"
+                onClick={() => setScannerOpen(true)}
+              >
+                <Camera className="size-4" /> Câmera
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11"
                 onClick={() =>
                   startTransition(async () => {
                     const code = window.prompt("Código de barras");
@@ -471,6 +513,18 @@ export function PdvTerminal({
             <p className="mt-2 text-xs text-muted-foreground">Nenhum produto ativo encontrado.</p>
           )}
         </div>
+
+        {/* Montado sob demanda: o chunk da câmera só carrega ao abrir o leitor. */}
+        {scannerOpen && (
+          <BarcodeScanner
+            open
+            onClose={() => setScannerOpen(false)}
+            onDetect={handleCameraScan}
+            title="Ler código de barras — PDV"
+            continuous={continuousScan}
+            onContinuousChange={setContinuousScan}
+          />
+        )}
 
         <div className="rounded-xl border bg-card shadow-sm">
           <div className="flex items-center justify-between border-b px-4 py-3">
@@ -539,7 +593,7 @@ export function PdvTerminal({
                             setCart((current) =>
                               current.map((row, i) =>
                                 i === index
-                                  ? { ...row, discount: Number(event.target.value.replace(",", ".")) || 0 }
+                                  ? { ...row, discount: parseDecimal(event.target.value) ?? 0 }
                                   : row
                               )
                             )
@@ -688,7 +742,15 @@ export function PdvTerminal({
                         onChange={(event) =>
                           setPayments((current) =>
                             current.map((row, i) =>
-                              i === index ? { ...row, installments: Number(event.target.value) } : row
+                              i === index
+                                ? {
+                                    ...row,
+                                    installments: Math.min(
+                                      36,
+                                      Math.max(1, Math.trunc(parseDecimal(event.target.value) ?? 1))
+                                    ),
+                                  }
+                                : row
                             )
                           )
                         }

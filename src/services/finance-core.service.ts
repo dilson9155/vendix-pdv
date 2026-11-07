@@ -15,6 +15,7 @@ import {
   chartAccountSchema,
   costCenterSchema,
   financialAccountSchema,
+  numberInput,
   transferSchema,
 } from "@/lib/validation";
 import { z } from "zod";
@@ -501,7 +502,7 @@ const ledgerManualSchema = z.object({
   date: z.string().min(10),
   competenceDate: z.string().optional(),
   type: z.enum(["ENTRADA", "SAIDA"]),
-  amount: z.coerce.number().positive("Informe um valor maior que zero."),
+  amount: numberInput({ label: "Valor", gt: 0 }),
   description: z.string().trim().min(1, "Informe a descrição.").max(200),
   document: z.string().trim().max(60).optional(),
 });

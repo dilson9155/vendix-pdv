@@ -7,7 +7,7 @@ import { getTenantPreferences } from "@/services/settings.service";
 import { withSerializableTransaction } from "@/lib/transaction";
 import { dec, money, qty } from "@/lib/money";
 import { endOfBusinessDay, startOfBusinessDay } from "@/lib/date";
-import { stockMovementSchema, stockTransferSchema } from "@/lib/validation";
+import { numberInput, stockMovementSchema, stockTransferSchema } from "@/lib/validation";
 import { findStockLevel, putStockLevel } from "@/services/stock-level.service";
 import { z } from "zod";
 
@@ -433,7 +433,7 @@ const inventorySchema = z.object({
       z.object({
         productId: z.string().min(1),
         variantId: z.string().optional(),
-        counted: z.coerce.number().min(0),
+        counted: numberInput({ label: "Quantidade contada", min: 0, fallback: 0 }),
       })
     )
     .min(1),

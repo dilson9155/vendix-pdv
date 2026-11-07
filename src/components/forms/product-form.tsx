@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Camera, Pencil, Plus, Trash2 } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,9 +15,18 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FormMessage, inputClass, selectClass, textareaClass } from "@/components/forms/form-kit";
-import { saveProductAction, toggleProductAction } from "@/app/actions/catalog.actions";
+import { checkBarcodeAction, saveProductAction, toggleProductAction } from "@/app/actions/catalog.actions";
 import { InlineAction } from "@/components/forms/form-kit";
+import { validateBarcode } from "@/lib/barcode";
+import type { ScanOutcome } from "@/components/barcode/barcode-scanner";
 import type { ProductDetail } from "@/services/catalog.service";
+import { cn } from "@/lib/utils";
+
+// Leitor de câmera carregado sob demanda (só ao clicar em "Escanear").
+const BarcodeScanner = dynamic(
+  () => import("@/components/barcode/barcode-scanner").then((module) => module.BarcodeScanner),
+  { ssr: false }
+);
 
 type Option = { id: string; name: string };
 type VariantRow = {
@@ -32,6 +43,13 @@ type VariantRow = {
 };
 
 const UNIT_OPTIONS = ["UN", "KG", "LT", "MT", "CX", "PCT"];
+
+type BarcodeNotice = {
+  kind: "error" | "info" | "success";
+  message: string;
+  /** Produto que já usa o código lido (oferece o link de visualização). */
+  productId?: string;
+};
 
 function newVariant(): VariantRow {
   return {
@@ -72,7 +90,49 @@ export function ProductDialog({
     })) ?? []
   );
   const [error, setError] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [barcodeNotice, setBarcodeNotice] = useState<BarcodeNotice | null>(null);
+  const barcodeInput = useRef<HTMLInputElement>(null);
   const [pending, startTransition] = useTransition();
+
+  /**
+   * Processa o código lido pela câmera: valida o dígito verificador e consulta
+   * se o código já existe na empresa antes de preencher o campo.
+   */
+  async function handleBarcodeScan(code: string): Promise<ScanOutcome> {
+    const validation = validateBarcode(code);
+    if (!validation.ok) {
+      setBarcodeNotice({
+        kind: "error",
+        message: validation.message ?? "Código de barras inválido. Verifique o número lido.",
+      });
+      return { ok: false, message: "Código inválido — tente ler novamente.", close: false };
+    }
+
+    const result = await checkBarcodeAction(code);
+    if (!result.ok || !result.data) {
+      const message = result.ok ? "Não foi possível verificar o código." : result.error;
+      setBarcodeNotice({ kind: "error", message });
+      return { ok: false, message, close: true };
+    }
+
+    if (barcodeInput.current) barcodeInput.current.value = code;
+
+    if (result.data.exists) {
+      setBarcodeNotice({
+        kind: "info",
+        message: `O código ${code} já está cadastrado no produto "${result.data.name}".`,
+        productId: result.data.productId,
+      });
+      return { ok: false, message: "Código já cadastrado", close: true };
+    }
+
+    setBarcodeNotice({
+      kind: "success",
+      message: `Código ${code} lido. Conclua o preenchimento do cadastro.`,
+    });
+    return { ok: true, message: "Código lido", close: true };
+  }
 
   function updateVariant(key: string, patch: Partial<VariantRow>) {
     setVariants((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
@@ -179,7 +239,52 @@ export function ProductDialog({
               <input id="product-sku" name="sku" defaultValue={product?.sku} className={inputClass} required maxLength={60} />
             </Field>
             <Field label="Código de barras" htmlFor="product-barcode" optional hint="Para produtos com variações, prefira o código por variação.">
-              <input id="product-barcode" name="barcode" defaultValue={product?.barcode ?? ""} className={inputClass} maxLength={60} />
+              <div className="flex gap-2">
+                <input
+                  ref={barcodeInput}
+                  id="product-barcode"
+                  name="barcode"
+                  defaultValue={product?.barcode ?? ""}
+                  className={inputClass}
+                  maxLength={60}
+                  autoCapitalize="off"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setBarcodeNotice(null);
+                    setScannerOpen(true);
+                  }}
+                  aria-label="Escanear código de barras com a câmera"
+                  className="h-10 shrink-0"
+                >
+                  <Camera className="size-4" /> <span className="hidden sm:inline">Escanear</span>
+                </Button>
+              </div>
+              {barcodeNotice && (
+                <p
+                  role="status"
+                  className={cn(
+                    "mt-1.5 text-xs",
+                    barcodeNotice.kind === "error" && "text-destructive",
+                    barcodeNotice.kind === "info" && "text-amber-600 dark:text-amber-400",
+                    barcodeNotice.kind === "success" && "text-emerald-600 dark:text-emerald-400"
+                  )}
+                >
+                  {barcodeNotice.message}{" "}
+                  {barcodeNotice.productId && (
+                    <Link
+                      href={`/produtos/${barcodeNotice.productId}`}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      Ver produto
+                    </Link>
+                  )}
+                </p>
+              )}
             </Field>
             <Field label="Categoria" htmlFor="product-category" optional>
               <select id="product-category" name="categoryId" defaultValue={product?.categoryId ?? ""} className={selectClass}>
@@ -340,6 +445,17 @@ export function ProductDialog({
             <Button type="submit" disabled={pending}>{pending ? "Salvando..." : "Salvar produto"}</Button>
           </div>
         </form>
+
+        {/* Leitor de câmera (carregado sob demanda ao clicar em "Escanear"). */}
+        {scannerOpen && (
+          <BarcodeScanner
+            open
+            onClose={() => setScannerOpen(false)}
+            onDetect={handleBarcodeScan}
+            title="Escanear código de barras"
+            hideModeToggle
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

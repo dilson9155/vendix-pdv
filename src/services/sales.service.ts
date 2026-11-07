@@ -20,7 +20,7 @@ import {
   startOfBusinessDay,
   todayISO,
 } from "@/lib/date";
-import { saleSchema, type SaleInput } from "@/lib/validation";
+import { numberInput, saleSchema, type SaleInput } from "@/lib/validation";
 import { findStockLevel, putStockLevel } from "@/services/stock-level.service";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -764,7 +764,7 @@ const returnSchema = z.object({
     .array(
       z.object({
         saleItemId: z.string().min(1),
-        quantity: z.coerce.number().positive("Quantidade inválida."),
+        quantity: numberInput({ label: "Quantidade", gt: 0, message: "Quantidade inválida." }),
         restock: z.boolean().default(true),
       })
     )
