@@ -106,7 +106,9 @@ export async function requestPasswordReset(raw: unknown): Promise<RequestResetRe
       : "Solicitação de redefinição de senha gerada (provedor de e-mail não configurado)",
   });
 
-  const devLink = !sent || process.env.PASSWORD_RESET_DEV_LINK === "true" ? link : undefined;
+  const allowDevLink =
+    process.env.NODE_ENV !== "production" || process.env.PASSWORD_RESET_DEV_LINK === "true";
+  const devLink = allowDevLink && !sent ? link : (process.env.PASSWORD_RESET_DEV_LINK === "true" ? link : undefined);
 
   return { ...generic, ...(devLink ? { devLink } : {}) };
 }
