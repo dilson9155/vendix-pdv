@@ -154,7 +154,7 @@ export default async function PayablesPage({
               <tr>
                 <th>Descrição</th>
                 <th>Fornecedor</th>
-                <th>Competência</th>
+                <th>Data do lançamento</th>
                 <th>Vencimento</th>
                 <th className="num">Valor</th>
                 <th className="num">Pago</th>
@@ -171,7 +171,7 @@ export default async function PayablesPage({
                     {row.document && <p className="text-[11px] text-muted-foreground">Doc. {row.document}</p>}
                   </td>
                   <td>{row.supplierName ?? "—"}</td>
-                  <td>{row.competenceDate.split("-").reverse().join("-")}</td>
+                  <td>{row.issueDate.split("-").reverse().join("-")}</td>
                   <td>{row.dueDate.split("-").reverse().join("-")}</td>
                   <td className="num font-semibold">{formatBRL(row.value)}</td>
                   <td className="num">{formatBRL(row.paid)}</td>
