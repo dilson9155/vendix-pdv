@@ -26,7 +26,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        from: process.env.EMAIL_FROM || "Vendix <nao-responda@vendix.local>",
+        from: process.env.EMAIL_FROM || "Vendix <onboarding@resend.dev>",
         to: [to],
         subject,
         html,
