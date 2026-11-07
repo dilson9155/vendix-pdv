@@ -63,13 +63,22 @@ export async function requestPasswordReset(raw: unknown): Promise<RequestResetRe
   if (recent >= 3) return generic;
 
   const token = newToken();
-  await prisma.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + RESET_TTL_MINUTES * 60_000),
-    },
-  });
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + RESET_TTL_MINUTES * 60_000);
+
+  await prisma.$transaction([
+    prisma.passwordResetToken.updateMany({
+      where: { userId: user.id, usedAt: null },
+      data: { usedAt: now },
+    }),
+    prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(token),
+        expiresAt,
+      },
+    }),
+  ]);
 
   const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
   const link = `${base}/redefinir-senha/${token}`;
@@ -82,6 +91,10 @@ export async function requestPasswordReset(raw: unknown): Promise<RequestResetRe
      <p>Se você não solicitou, ignore este e-mail. Sua senha permanece a mesma.</p>`
   );
 
+  if (!sent) {
+    console.info(`[recuperar-senha] RESEND_API_KEY não configurada. Link para ${user.email}: ${link}`);
+  }
+
   await auditLog({
     userId: user.id,
     action: "UPDATE",
@@ -93,10 +106,7 @@ export async function requestPasswordReset(raw: unknown): Promise<RequestResetRe
       : "Solicitação de redefinição de senha gerada (provedor de e-mail não configurado)",
   });
 
-  const devLink =
-    process.env.NODE_ENV !== "production" && process.env.PASSWORD_RESET_DEV_LINK === "true"
-      ? link
-      : undefined;
+  const devLink = !sent || process.env.PASSWORD_RESET_DEV_LINK === "true" ? link : undefined;
 
   return { ...generic, ...(devLink ? { devLink } : {}) };
 }
