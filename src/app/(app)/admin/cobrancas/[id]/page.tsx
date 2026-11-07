@@ -53,6 +53,7 @@ export default async function ChargeDetailPage({
                 label="Marcar como paga"
                 variant="default"
                 icon={<CheckCircle2 className="size-3.5" />}
+                confirmTitle="Confirmar recebimento"
                 confirmMessage="Confirmar o recebimento desta cobrança? A loja pode ser reativada automaticamente."
               />
             )}

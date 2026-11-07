@@ -44,6 +44,7 @@ export type ReceivableRow = {
   chartAccount: string | null;
   chartAccountId: string | null;
   costCenterName: string | null;
+  costCenterId: string | null;
   issueDate: string;
   competenceDate: string;
   dueDate: string;
@@ -186,6 +187,7 @@ export async function listReceivables(
         : null,
       chartAccountId: receivable.chartAccountId,
       costCenterName: receivable.costCenter?.name ?? null,
+      costCenterId: receivable.costCenterId,
       issueDate: receivable.issueDate.toISOString().slice(0, 10),
       competenceDate: receivable.competenceDate.toISOString().slice(0, 10),
       dueDate: receivable.dueDate.toISOString().slice(0, 10),

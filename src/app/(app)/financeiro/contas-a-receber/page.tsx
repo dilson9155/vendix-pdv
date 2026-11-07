@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { listReceivables, listReceivableOptions } from "@/services/receivables.service";
 import { ReceivableActions } from "@/components/finance/receivable-actions";
+import { ReceivableDialog } from "@/components/finance/receivable-dialog";
 import { EmptyState, PageHeader, StatCard, StatusBadge, TableShell } from "@/components/page-blocks";
 import { formatBRL } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,16 @@ export default async function ReceivablesPage({
             <Button asChild size="sm">
               <Link href="/clientes">Gerenciar clientes</Link>
             </Button>
+            <ReceivableDialog
+              mode="create"
+              options={{
+                accounts: options.accounts,
+                chartAccounts: options.chartAccounts,
+                costCenters: options.costCenters,
+                customers: options.customers,
+                branches: options.branches,
+              }}
+            />
           </>
         }
       />
@@ -169,21 +180,50 @@ export default async function ReceivablesPage({
                     <StatusBadge status={row.status} />
                   </td>
                   <td>
-                    <ReceivableActions
-                      receivable={{
-                        id: row.id,
-                        description: row.description,
-                        balance: row.balance,
-                        status: row.status,
-                      }}
-                      accounts={options.accounts}
-                      payments={row.payments.map((payment) => ({
-                        id: payment.id,
-                        amount: payment.amount,
-                        date: payment.date,
-                        reversedAt: payment.reversedAt,
-                      }))}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <ReceivableDialog
+                        mode="edit"
+                        triggerLabel="Editar"
+                        triggerVariant="outline"
+                        triggerSize="sm"
+                        options={{
+                          accounts: options.accounts,
+                          chartAccounts: options.chartAccounts,
+                          costCenters: options.costCenters,
+                          customers: options.customers,
+                          branches: options.branches,
+                        }}
+                        receivable={{
+                          id: row.id,
+                          branchId: row.branchId,
+                          customerId: row.customerId,
+                          description: row.description,
+                          document: row.document,
+                          chartAccountId: row.chartAccountId,
+                          costCenterId: row.costCenterId,
+                          issueDate: row.issueDate,
+                          competenceDate: row.competenceDate,
+                          dueDate: row.dueDate,
+                          value: row.value,
+                          notes: row.notes,
+                        }}
+                      />
+                      <ReceivableActions
+                        receivable={{
+                          id: row.id,
+                          description: row.description,
+                          balance: row.balance,
+                          status: row.status,
+                        }}
+                        accounts={options.accounts}
+                        payments={row.payments.map((payment) => ({
+                          id: payment.id,
+                          amount: payment.amount,
+                          date: payment.date,
+                          reversedAt: payment.reversedAt,
+                        }))}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

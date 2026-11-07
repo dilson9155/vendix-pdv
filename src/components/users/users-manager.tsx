@@ -104,6 +104,7 @@ export function UsersManager({
                         action={() => toggleUserAction(user.id, !user.active)}
                         label={user.active ? "Desativar" : "Ativar"}
                         variant={user.active ? "outline" : "secondary"}
+                        confirmTitle="Alterar acesso do usuário"
                         confirmMessage="Alterar o acesso deste usuário?"
                         onDone={() => router.refresh()}
                       />

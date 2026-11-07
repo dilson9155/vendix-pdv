@@ -330,6 +330,59 @@ export async function saveCostCenter(ctx: AuthContext, raw: unknown) {
   return { id: saved.id };
 }
 
+export async function deleteChartAccount(ctx: AuthContext, id: string) {
+  assertPermission(ctx, "finance.structure");
+  const existing = await prisma.chartAccount.findFirst({
+    where: { id, tenantId: ctx.tenantId },
+  });
+  if (!existing) throw new Error("Conta contábil não encontrada.");
+  const [children, ledger, payables, receivables] = await Promise.all([
+    prisma.chartAccount.count({ where: { parentId: id, tenantId: ctx.tenantId } }),
+    prisma.ledgerEntry.count({ where: { chartAccountId: id, tenantId: ctx.tenantId } }),
+    prisma.payable.count({ where: { chartAccountId: id, tenantId: ctx.tenantId } }),
+    prisma.receivable.count({ where: { chartAccountId: id, tenantId: ctx.tenantId } }),
+  ]);
+  if (children > 0 || ledger > 0 || payables > 0 || receivables > 0) {
+    throw new Error("Conta contábil em uso. Inative-a em vez de excluir.");
+  }
+  await prisma.chartAccount.delete({ where: { id } });
+  await auditLog({
+    userId: ctx.userId,
+    tenantId: ctx.tenantId,
+    action: "DELETE",
+    module: "financeiro",
+    entity: "ChartAccount",
+    entityId: id,
+    description: `Conta contábil "${existing.code} ${existing.name}" excluída`,
+  });
+}
+
+export async function deleteCostCenter(ctx: AuthContext, id: string) {
+  assertPermission(ctx, "finance.structure");
+  const existing = await prisma.costCenter.findFirst({
+    where: { id, tenantId: ctx.tenantId },
+  });
+  if (!existing) throw new Error("Centro de custo não encontrado.");
+  const [ledger, payables, receivables] = await Promise.all([
+    prisma.ledgerEntry.count({ where: { costCenterId: id, tenantId: ctx.tenantId } }),
+    prisma.payable.count({ where: { costCenterId: id, tenantId: ctx.tenantId } }),
+    prisma.receivable.count({ where: { costCenterId: id, tenantId: ctx.tenantId } }),
+  ]);
+  if (ledger > 0 || payables > 0 || receivables > 0) {
+    throw new Error("Centro de custo em uso. Inative-o em vez de excluir.");
+  }
+  await prisma.costCenter.delete({ where: { id } });
+  await auditLog({
+    userId: ctx.userId,
+    tenantId: ctx.tenantId,
+    action: "DELETE",
+    module: "financeiro",
+    entity: "CostCenter",
+    entityId: id,
+    description: `Centro de custo "${existing.name}" excluído`,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Livro caixa
 // ---------------------------------------------------------------------------

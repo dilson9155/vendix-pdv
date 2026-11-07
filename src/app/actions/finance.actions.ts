@@ -18,6 +18,8 @@ import {
 import {
   createAccountTransfer,
   createManualLedgerEntry,
+  deleteChartAccount,
+  deleteCostCenter,
   saveChartAccount,
   saveCostCenter,
   saveFinancialAccount,
@@ -26,6 +28,7 @@ import {
 
 function revalidateFinance(): void {
   revalidatePath("/financeiro");
+  revalidatePath("/financeiro/contas");
   revalidatePath("/financeiro/contas-a-pagar");
   revalidatePath("/financeiro/contas-a-receber");
   revalidatePath("/financeiro/fluxo-caixa");
@@ -132,7 +135,7 @@ export async function saveChartAccountAction(raw: unknown): Promise<ActionResult
   return runAction(async () => {
     const ctx = await actionContext();
     await saveChartAccount(ctx, raw);
-    revalidatePath("/financeiro/plano-contas");
+    revalidatePath("/financeiro/contas");
     return undefined;
   });
 }
@@ -141,7 +144,25 @@ export async function saveCostCenterAction(raw: unknown): Promise<ActionResult> 
   return runAction(async () => {
     const ctx = await actionContext();
     await saveCostCenter(ctx, raw);
-    revalidatePath("/financeiro/plano-contas");
+    revalidatePath("/financeiro/contas");
+    return undefined;
+  });
+}
+
+export async function deleteChartAccountAction(raw: { id: string }): Promise<ActionResult> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    await deleteChartAccount(ctx, raw.id);
+    revalidatePath("/financeiro/contas");
+    return undefined;
+  });
+}
+
+export async function deleteCostCenterAction(raw: { id: string }): Promise<ActionResult> {
+  return runAction(async () => {
+    const ctx = await actionContext();
+    await deleteCostCenter(ctx, raw.id);
+    revalidatePath("/financeiro/contas");
     return undefined;
   });
 }

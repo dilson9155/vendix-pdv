@@ -168,6 +168,7 @@ export default async function AdminTenantsPage({
                             payload={{ tenantId: tenant.id, status: "ATIVO" }}
                             label="Reativar"
                             variant="secondary"
+                            confirmTitle="Reativar loja"
                             confirmMessage="Reativar o acesso desta loja?"
                           />
                         ) : (
@@ -180,6 +181,7 @@ export default async function AdminTenantsPage({
                             }}
                             label="Suspender"
                             variant="destructive"
+                            confirmTitle="Suspender loja"
                             confirmMessage="Suspender esta loja por falta de pagamento? O acesso será bloqueado."
                           />
                         )}

@@ -6,6 +6,7 @@ import { Ban, Loader2, RotateCcw, Undo2 } from "lucide-react";
 import { ActionForm, Field, FormMessage, inputClass, selectClass, textareaClass } from "@/components/forms/form-kit";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatBRL } from "@/lib/money";
 import { todayISO } from "@/lib/date";
 import {
@@ -34,25 +35,49 @@ export function PayableActions({
   const canSettle = (payable.status === "ABERTO" || payable.status === "PARCIAL") && payable.balance > 0;
   const canCancel = payable.status !== "CANCELADO";
 
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [reverseOpen, setReverseOpen] = useState(false);
+  const [reversePaymentId, setReversePaymentId] = useState<string | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
+
   const reversePayment = (paymentId: string) => {
-    const reason = window.prompt("Motivo do estorno do pagamento:");
-    if (!reason || !reason.trim()) return;
+    setReversePaymentId(paymentId);
+    setReverseReason("");
+    setReverseOpen(true);
+  };
+
+  const submitReverse = () => {
+    if (!reversePaymentId || !reverseReason.trim()) return;
     setError(null);
     startTransition(async () => {
-      const result = await reversePayableAction({ paymentId, reason });
+      const result = await reversePayableAction({ paymentId: reversePaymentId, reason: reverseReason });
       if (!result.ok) setError(result.error);
-      else router.refresh();
+      else {
+        setReverseOpen(false);
+        setReversePaymentId(null);
+        setReverseReason("");
+        router.refresh();
+      }
     });
   };
 
   const cancelPayable = () => {
-    const reason = window.prompt(`Motivo do cancelamento de "${payable.description}":`);
-    if (!reason || !reason.trim()) return;
+    setCancelReason("");
+    setCancelOpen(true);
+  };
+
+  const submitCancel = () => {
+    if (!cancelReason.trim()) return;
     setError(null);
     startTransition(async () => {
-      const result = await cancelPayableAction({ id: payable.id, reason });
+      const result = await cancelPayableAction({ id: payable.id, reason: cancelReason });
       if (!result.ok) setError(result.error);
-      else router.refresh();
+      else {
+        setCancelOpen(false);
+        setCancelReason("");
+        router.refresh();
+      }
     });
   };
 
@@ -142,6 +167,54 @@ export function PayableActions({
           </ActionForm>
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={(next) => {
+          if (!pendingId) setCancelOpen(next);
+        }}
+        title="Cancelar conta a pagar"
+        description={`Cancelar "${payable.description}"? Os pagamentos precisam ser estornados antes.`}
+        confirmLabel="Cancelar conta"
+        tone="danger"
+        pending={pendingId}
+        confirmDisabled={!cancelReason.trim()}
+        onConfirm={submitCancel}
+      >
+        <Field label="Motivo do cancelamento" htmlFor="payable-cancel-reason" required>
+          <textarea
+            id="payable-cancel-reason"
+            className={textareaClass}
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ex.: duplicidade de lançamento"
+          />
+        </Field>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={reverseOpen}
+        onOpenChange={(next) => {
+          if (!pendingId) setReverseOpen(next);
+        }}
+        title="Estornar pagamento"
+        description="Informe o motivo do estorno do pagamento."
+        confirmLabel="Estornar"
+        tone="warning"
+        pending={pendingId}
+        confirmDisabled={!reverseReason.trim()}
+        onConfirm={submitReverse}
+      >
+        <Field label="Motivo do estorno" htmlFor="payable-reverse-reason" required>
+          <textarea
+            id="payable-reverse-reason"
+            className={textareaClass}
+            value={reverseReason}
+            onChange={(event) => setReverseReason(event.target.value)}
+            placeholder="Ex.: pagamento lançado em duplicidade"
+          />
+        </Field>
+      </ConfirmDialog>
     </div>
   );
 }

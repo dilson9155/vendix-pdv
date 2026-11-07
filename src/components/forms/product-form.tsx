@@ -484,6 +484,7 @@ export function ProductToggle({ id, active }: { id: string; active: boolean }) {
       action={() => toggleProductAction(id, !active)}
       label={active ? "Inativar" : "Ativar"}
       variant={active ? "outline" : "secondary"}
+      confirmTitle="Inativar produto"
       confirmMessage={active ? "Inativar este produto? Ele deixa de aparecer no PDV, mas o histórico é preservado." : undefined}
       onDone={() => router.refresh()}
     />

@@ -37,11 +37,13 @@ export type PayableRow = {
   branchId: string;
   branchName: string;
   supplierName: string | null;
+  supplierId: string | null;
   description: string;
   document: string | null;
   chartAccount: string | null;
   chartAccountId: string | null;
   costCenterName: string | null;
+  costCenterId: string | null;
   issueDate: string;
   competenceDate: string;
   dueDate: string;
@@ -168,6 +170,7 @@ export async function listPayables(
       branchId: payable.branchId,
       branchName: payable.branch.name,
       supplierName: payable.supplier?.name ?? null,
+      supplierId: payable.supplierId,
       description: payable.description,
       document: payable.document,
       chartAccount: payable.chartAccount
@@ -175,6 +178,7 @@ export async function listPayables(
         : null,
       chartAccountId: payable.chartAccountId,
       costCenterName: payable.costCenter?.name ?? null,
+      costCenterId: payable.costCenterId,
       issueDate: payable.issueDate.toISOString().slice(0, 10),
       competenceDate: payable.competenceDate.toISOString().slice(0, 10),
       dueDate: payable.dueDate.toISOString().slice(0, 10),

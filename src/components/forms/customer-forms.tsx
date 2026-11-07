@@ -209,6 +209,7 @@ export function CustomerToggle({ id, active }: { id: string; active: boolean }) 
       action={() => toggleCustomerAction(id, !active)}
       label={active ? "Inativar" : "Ativar"}
       variant={active ? "outline" : "secondary"}
+      confirmTitle="Inativar cliente"
       confirmMessage={active ? "Inativar este cliente? O histórico é preservado." : undefined}
       onDone={() => router.refresh()}
     />
@@ -222,6 +223,7 @@ export function SupplierToggle({ id, active }: { id: string; active: boolean }) 
       action={() => toggleSupplierAction(id, !active)}
       label={active ? "Inativar" : "Ativar"}
       variant={active ? "outline" : "secondary"}
+      confirmTitle="Inativar fornecedor"
       confirmMessage={active ? "Inativar este fornecedor? O histórico é preservado." : undefined}
       onDone={() => router.refresh()}
     />

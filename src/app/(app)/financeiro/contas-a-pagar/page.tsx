@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { requirePermission } from "@/lib/tenant";
 import { listPayables, listPayableOptions } from "@/services/payables.service";
 import { PayableActions } from "@/components/finance/payable-actions";
+import { PayableDialog } from "@/components/finance/payable-dialog";
 import { EmptyState, PageHeader, StatCard, StatusBadge, TableShell } from "@/components/page-blocks";
 import { formatBRL } from "@/lib/money";
 import { Button } from "@/components/ui/button";
@@ -75,6 +76,16 @@ export default async function PayablesPage({
             <Button asChild size="sm">
               <Link href="/fornecedores">Gerenciar fornecedores</Link>
             </Button>
+            <PayableDialog
+              mode="create"
+              options={{
+                accounts: options.accounts,
+                chartAccounts: options.chartAccounts,
+                costCenters: options.costCenters,
+                suppliers: options.suppliers,
+                branches: options.branches,
+              }}
+            />
           </>
         }
       />
@@ -169,21 +180,50 @@ export default async function PayablesPage({
                     <StatusBadge status={row.status} />
                   </td>
                   <td>
-                    <PayableActions
-                      payable={{
-                        id: row.id,
-                        description: row.description,
-                        balance: row.balance,
-                        status: row.status,
-                      }}
-                      accounts={options.accounts}
-                      payments={row.payments.map((payment) => ({
-                        id: payment.id,
-                        amount: payment.amount,
-                        date: payment.date,
-                        reversedAt: payment.reversedAt,
-                      }))}
-                    />
+                    <div className="flex flex-wrap gap-2">
+                      <PayableDialog
+                        mode="edit"
+                        triggerLabel="Editar"
+                        triggerVariant="outline"
+                        triggerSize="sm"
+                        options={{
+                          accounts: options.accounts,
+                          chartAccounts: options.chartAccounts,
+                          costCenters: options.costCenters,
+                          suppliers: options.suppliers,
+                          branches: options.branches,
+                        }}
+                        payable={{
+                          id: row.id,
+                          branchId: row.branchId,
+                          supplierId: row.supplierId,
+                          description: row.description,
+                          document: row.document,
+                          chartAccountId: row.chartAccountId,
+                          costCenterId: row.costCenterId,
+                          issueDate: row.issueDate,
+                          competenceDate: row.competenceDate,
+                          dueDate: row.dueDate,
+                          value: row.value,
+                          notes: row.notes,
+                        }}
+                      />
+                      <PayableActions
+                        payable={{
+                          id: row.id,
+                          description: row.description,
+                          balance: row.balance,
+                          status: row.status,
+                        }}
+                        accounts={options.accounts}
+                        payments={row.payments.map((payment) => ({
+                          id: payment.id,
+                          amount: payment.amount,
+                          date: payment.date,
+                          reversedAt: payment.reversedAt,
+                        }))}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog, type ConfirmTone } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import type { ActionResult } from "@/lib/action-result";
@@ -179,6 +180,9 @@ export function InlineAction({
   label,
   pendingLabel,
   confirmMessage,
+  confirmTitle,
+  confirmLabel,
+  confirmTone,
   variant = "outline",
   size = "sm",
   icon,
@@ -189,6 +193,9 @@ export function InlineAction({
   label: string;
   pendingLabel?: string;
   confirmMessage?: string;
+  confirmTitle?: string;
+  confirmLabel?: string;
+  confirmTone?: ConfirmTone;
   variant?: "default" | "outline" | "destructive" | "secondary" | "ghost";
   size?: "default" | "sm" | "icon" | "icon-sm" | "lg";
   icon?: ReactNode;
@@ -201,6 +208,9 @@ export function InlineAction({
       label={label}
       pendingLabel={pendingLabel}
       confirmMessage={confirmMessage}
+      confirmTitle={confirmTitle}
+      confirmLabel={confirmLabel}
+      confirmTone={confirmTone}
       variant={variant}
       size={size}
       icon={icon}
@@ -222,6 +232,9 @@ export function InlineServerAction<T>({
   label,
   pendingLabel,
   confirmMessage,
+  confirmTitle,
+  confirmLabel,
+  confirmTone,
   variant = "outline",
   size = "sm",
   icon,
@@ -233,6 +246,9 @@ export function InlineServerAction<T>({
   label: string;
   pendingLabel?: string;
   confirmMessage?: string;
+  confirmTitle?: string;
+  confirmLabel?: string;
+  confirmTone?: ConfirmTone;
   variant?: "default" | "outline" | "destructive" | "secondary" | "ghost";
   size?: "default" | "sm" | "icon" | "icon-sm" | "lg";
   icon?: ReactNode;
@@ -245,6 +261,9 @@ export function InlineServerAction<T>({
       label={label}
       pendingLabel={pendingLabel}
       confirmMessage={confirmMessage}
+      confirmTitle={confirmTitle}
+      confirmLabel={confirmLabel}
+      confirmTone={confirmTone}
       variant={variant}
       size={size}
       icon={icon}
@@ -259,6 +278,9 @@ function InlineActionBase({
   label,
   pendingLabel,
   confirmMessage,
+  confirmTitle,
+  confirmLabel,
+  confirmTone,
   variant = "outline",
   size = "sm",
   icon,
@@ -269,6 +291,9 @@ function InlineActionBase({
   label: string;
   pendingLabel?: string;
   confirmMessage?: string;
+  confirmTitle?: string;
+  confirmLabel?: string;
+  confirmTone?: ConfirmTone;
   variant?: "default" | "outline" | "destructive" | "secondary" | "ghost";
   size?: "default" | "sm" | "icon" | "icon-sm" | "lg";
   icon?: ReactNode;
@@ -277,6 +302,24 @@ function InlineActionBase({
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const firstWord = label.split(" ")[0]?.toLowerCase() ?? "";
+  const destructiveVerb =
+    /^(cancelar|suspender|desativar|inativar|excluir|remover)$/.test(firstWord);
+  const tone: ConfirmTone =
+    confirmTone ?? (variant === "destructive" || destructiveVerb ? "danger" : variant === "outline" ? "warning" : "info");
+  const actionLabel = confirmLabel ?? (destructiveVerb ? `Sim, ${firstWord}` : label);
+
+  const runAction = () => {
+    setError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (!result.ok) setError(result.error);
+      else onDone?.(result.data);
+      setConfirmOpen(false);
+    });
+  };
 
   return (
     <span className="inline-flex flex-col items-start gap-1">
@@ -287,19 +330,27 @@ function InlineActionBase({
         className={className}
         disabled={pending}
         onClick={() => {
-          if (confirmMessage && !window.confirm(confirmMessage)) return;
-          setError(null);
-          startTransition(async () => {
-            const result = await action();
-            if (!result.ok) setError(result.error);
-            else onDone?.(result.data);
-          });
+          if (confirmMessage) setConfirmOpen(true);
+          else runAction();
         }}
       >
         {pending ? <Loader2 className="size-3.5 animate-spin" /> : icon}
         {pending ? (pendingLabel ?? "Aguarde...") : label}
       </Button>
       {error && <span className="max-w-56 text-[10px] leading-tight text-red-600">{error}</span>}
+
+      {confirmMessage && (
+        <ConfirmDialog
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          title={confirmTitle ?? label}
+          description={confirmMessage}
+          confirmLabel={actionLabel}
+          pending={pending}
+          tone={tone}
+          onConfirm={runAction}
+        />
+      )}
     </span>
   );
 }

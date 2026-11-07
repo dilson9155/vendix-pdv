@@ -159,6 +159,7 @@ export default async function AdminChargesPage({
                             action={settleChargeAction}
                             payload={charge.id}
                             label="Marcar paga"
+                            confirmTitle="Marcar cobrança como paga"
                             confirmMessage="Confirmar o recebimento desta cobrança?"
                           />
                         )}
@@ -167,6 +168,7 @@ export default async function AdminChargesPage({
                             action={cancelChargeAction}
                             payload={charge.id}
                             label="Cancelar"
+                            confirmTitle="Cancelar cobrança"
                             variant="destructive"
                             confirmMessage="Cancelar esta cobrança?"
                           />

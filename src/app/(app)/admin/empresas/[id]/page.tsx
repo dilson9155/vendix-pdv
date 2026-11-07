@@ -90,6 +90,7 @@ export default async function TenantDetailPage({
             label="Suspender por falta de pagamento"
             variant="destructive"
             icon={<ShieldAlert className="size-3.5" />}
+            confirmTitle="Suspender loja"
             confirmMessage="Suspender a loja por inadimplência? Usuários perdem o acesso até a regularização."
           />
         )}

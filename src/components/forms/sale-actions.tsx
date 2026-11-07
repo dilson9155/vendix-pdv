@@ -14,8 +14,9 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
-import { Field, FormMessage } from "@/components/forms/form-kit";
+import { Field, FormMessage, textareaClass } from "@/components/forms/form-kit";
 import { formatBRL } from "@/lib/money";
 import { downloadImageUrl, shareImageUrl } from "@/lib/share-image";
 import {
@@ -217,6 +218,8 @@ export function SaleActions({
   const [error, setError] = useState<string | null>(null);
   const [returnOpen, setReturnOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [restock, setRestock] = useState<Record<string, boolean>>(
     Object.fromEntries(items.map((item) => [item.id, true]))
@@ -251,22 +254,7 @@ export function SaleActions({
             size="sm"
             variant="destructive"
             disabled={pending}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  "Cancelar esta venda? O estoque será devolvido, o caixa estornado e a venda ficará marcada como cancelada."
-                )
-              )
-                return;
-              const value = window.prompt("Informe o motivo do cancelamento:");
-              if (!value || !value.trim()) return;
-              setError(null);
-              startTransition(async () => {
-                const result = await cancelSaleAction({ saleId, reason: value });
-                if (!result.ok) setError(result.error);
-                else router.refresh();
-              });
-            }}
+            onClick={() => setCancelOpen(true)}
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : <Ban className="size-4" />}
             Cancelar venda
@@ -274,6 +262,43 @@ export function SaleActions({
         )}
       </div>
       <FormMessage error={error} />
+
+      <ConfirmDialog
+        open={cancelOpen}
+        onOpenChange={(open) => {
+          if (!pending) setCancelOpen(open);
+        }}
+        title="Cancelar venda"
+        description="O estoque será devolvido, o caixa estornado e a venda ficará marcada como cancelada. Informe o motivo para continuar."
+        confirmLabel="Cancelar venda"
+        tone="danger"
+        pending={pending}
+        confirmDisabled={!cancelReason.trim()}
+        onConfirm={() => {
+          const value = cancelReason.trim();
+          if (!value) return;
+          setError(null);
+          startTransition(async () => {
+            const result = await cancelSaleAction({ saleId, reason: value });
+            if (!result.ok) setError(result.error);
+            else {
+              setCancelOpen(false);
+              setCancelReason("");
+              router.refresh();
+            }
+          });
+        }}
+      >
+        <Field label="Motivo do cancelamento" htmlFor="sale-cancel-reason" required>
+          <textarea
+            id="sale-cancel-reason"
+            className={textareaClass}
+            value={cancelReason}
+            onChange={(event) => setCancelReason(event.target.value)}
+            placeholder="Ex.: cliente desistiu da compra"
+          />
+        </Field>
+      </ConfirmDialog>
 
       {returnOpen && (
         <div className="mt-4 rounded-lg border bg-muted/30 p-3">
