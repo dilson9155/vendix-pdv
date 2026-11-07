@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   ArrowLeftRight,
   BarChart3,
@@ -10,6 +10,7 @@ import {
   BookOpen,
   Boxes,
   Building2,
+  ChevronLeft,
   ChevronRight,
   CircleDollarSign,
   ClipboardList,
@@ -81,18 +82,26 @@ export type ShellNotice = {
   level: "INFO" | "ALERTA" | "URGENTE";
 };
 
-function Brand() {
+function Brand({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <Link href="/dashboard" className="group flex items-center gap-3 px-4 py-5">
-      <VendixMark className="size-10 shadow-lg shadow-cyan-950/40 transition-transform duration-200 group-hover:scale-[1.04]" />
-      <span className="min-w-0 leading-tight">
-        <span className="block truncate text-base font-semibold tracking-tight text-sidebar-foreground">
-          Vendix
+    <Link
+      href="/dashboard"
+      className={cn(
+        "group flex items-center py-5 transition-all",
+        collapsed ? "justify-center px-2" : "gap-3 px-4"
+      )}
+    >
+      <VendixMark className="size-10 shrink-0 shadow-lg shadow-cyan-950/40 transition-transform duration-200 group-hover:scale-[1.04]" />
+      {!collapsed && (
+        <span className="min-w-0 leading-tight">
+          <span className="block truncate text-base font-semibold tracking-tight text-sidebar-foreground">
+            Vendix
+          </span>
+          <span className="block truncate text-[11px] text-sidebar-foreground/55">
+            Vendeu, organizou, cresceu.
+          </span>
         </span>
-        <span className="block truncate text-[11px] text-sidebar-foreground/55">
-          Vendeu, organizou, cresceu.
-        </span>
-      </span>
+      )}
     </Link>
   );
 }
@@ -101,18 +110,22 @@ function NavContent({
   groups,
   pathname,
   onNavigate,
+  collapsed = false,
 }: {
   groups: NavGroup[];
   pathname: string;
   onNavigate?: () => void;
+  collapsed?: boolean;
 }) {
   return (
     <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-4">
       {groups.map((group) => (
         <div key={group.title} className="pt-3 first:pt-0">
-          <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-sidebar-foreground/40">
-            {group.title}
-          </p>
+          {!collapsed && (
+            <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+              {group.title}
+            </p>
+          )}
           <div className="space-y-0.5">
             {group.items.map((item) => {
               const Icon = ICONS[item.icon];
@@ -123,16 +136,22 @@ function NavContent({
                   href={item.href}
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
+                  title={collapsed ? item.label : undefined}
                   className={cn(
-                    "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "group flex items-center rounded-lg text-sm font-medium transition-colors",
+                    collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2",
                     active
                       ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm"
                       : "text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   )}
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                  {active && <ChevronRight className="ml-auto size-3.5 opacity-70" />}
+                  {!collapsed && (
+                    <>
+                      <span className="truncate">{item.label}</span>
+                      {active && <ChevronRight className="ml-auto size-3.5 opacity-70" />}
+                    </>
+                  )}
                 </Link>
               );
             })}
@@ -313,39 +332,86 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  const footer = (
-    <div className="border-t border-sidebar-border p-3">
-      <p className="truncate text-xs font-semibold text-sidebar-foreground">{userName}</p>
-      <p className="truncate text-[11px] text-sidebar-foreground/55">{userEmail}</p>
-      <div className="mt-2">
-        <InstallAppButton
-          fullWidth
-          size="sm"
-          variant="ghost"
-          label="Instalar aplicativo"
-          className="justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        />
-      </div>
-      <form action={logoutAction} className="mt-2">
-        <Button
-          type="submit"
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <LogOut className="size-4" /> Sair
-        </Button>
-      </form>
-    </div>
-  );
+  useEffect(() => {
+    try {
+      if (window.localStorage.getItem("vendix.sidebar.collapsed") === "1") {
+        setCollapsed(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleCollapsed = () => {
+    setCollapsed((value) => {
+      const next = !value;
+      try {
+        window.localStorage.setItem("vendix.sidebar.collapsed", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   return (
     <div className="min-h-dvh bg-background">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-        <Brand />
-        <NavContent groups={navGroups} pathname={pathname} />
-        {footer}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-30 hidden flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200 lg:flex",
+          collapsed ? "w-16" : "w-64"
+        )}
+      >
+        <div className="relative">
+          <Brand collapsed={collapsed} />
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            title={collapsed ? "Expandir menu" : "Recolher menu"}
+            className="absolute right-2 top-5 hidden rounded-md p-1 text-sidebar-foreground/60 transition hover:bg-sidebar-accent hover:text-sidebar-foreground lg:inline-flex"
+          >
+            <ChevronLeft className={cn("size-4 transition-transform", collapsed && "rotate-180")} />
+          </button>
+        </div>
+        <NavContent groups={navGroups} pathname={pathname} collapsed={collapsed} />
+        <div className={cn("border-t border-sidebar-border transition-all", collapsed ? "p-2" : "p-3")}>
+          {!collapsed && (
+            <>
+              <p className="truncate text-xs font-semibold text-sidebar-foreground">{userName}</p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">{userEmail}</p>
+            </>
+          )}
+          <div className={cn("mt-2 flex", collapsed ? "flex-col items-center gap-2" : "flex-col gap-2")}>
+            <InstallAppButton
+              fullWidth={!collapsed}
+              size="sm"
+              variant="ghost"
+              label={collapsed ? "" : "Instalar aplicativo"}
+              className={cn(
+                "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                collapsed ? "justify-center px-2" : "justify-start"
+              )}
+            />
+            <form action={logoutAction} className={cn(collapsed ? "w-auto" : "w-full")}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className={cn(
+                  "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  collapsed ? "w-auto justify-center px-2" : "w-full justify-start"
+                )}
+                title={collapsed ? "Sair" : undefined}
+              >
+                <LogOut className="size-4" />
+                {!collapsed && <span className="ml-2">Sair</span>}
+              </Button>
+            </form>
+          </div>
+        </div>
       </aside>
 
       {mobileOpen && (
@@ -367,11 +433,33 @@ export function AppShell({
             pathname={pathname}
             onNavigate={() => setMobileOpen(false)}
           />
-          <div className="shrink-0">{footer}</div>
+          <div className="shrink-0 border-t border-sidebar-border p-3">
+            <p className="truncate text-xs font-semibold text-sidebar-foreground">{userName}</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/55">{userEmail}</p>
+            <div className="mt-2">
+              <InstallAppButton
+                fullWidth
+                size="sm"
+                variant="ghost"
+                label="Instalar aplicativo"
+                className="justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              />
+            </div>
+            <form action={logoutAction} className="mt-2">
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <LogOut className="size-4" /> Sair
+              </Button>
+            </form>
+          </div>
         </div>
       )}
 
-      <div className="min-w-0 lg:pl-64">
+      <div className={cn("min-w-0 transition-all duration-200", collapsed ? "lg:pl-16" : "lg:pl-64")}>
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b bg-background px-3 sm:px-5 lg:bg-background/85 lg:backdrop-blur">
           <div className="flex min-w-0 items-center gap-2">
             <Button
