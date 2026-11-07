@@ -37,6 +37,7 @@ export async function GET(request: Request) {
 
   const bytes = await buildReportPdf({
     company: ctx.tenantName,
+    logoUrl: ctx.tenantLogoUrl,
     title: "Livro caixa",
     subtitle: `${rows.length} lançamento(s)`,
     period: `Período: ${formatDateBR(from)} a ${formatDateBR(to)}`,

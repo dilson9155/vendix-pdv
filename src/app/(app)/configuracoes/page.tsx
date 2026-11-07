@@ -42,7 +42,7 @@ export default async function SettingsPage() {
         <section className="rounded-xl border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold">Empresa</h2>
           <div className="mt-3">
-            <CompanyForm />
+            <CompanyForm logoUrl={company.logoUrl} />
           </div>
         </section>
 

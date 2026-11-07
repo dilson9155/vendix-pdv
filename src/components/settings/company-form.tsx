@@ -1,15 +1,71 @@
 "use client";
 
+import { useRef, useState } from "react";
 import { ActionForm, Field, inputClass, selectClass, textareaClass } from "@/components/forms/form-kit";
 import { saveSettingsAction } from "@/app/actions/settings.actions";
 
-export function CompanyForm() {
+export function CompanyForm({ logoUrl }: { logoUrl?: string | null }) {
+  const [preview, setPreview] = useState<string | null>(logoUrl ?? null);
+  const [logoValue, setLogoValue] = useState<string>(logoUrl ?? "");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Selecione um arquivo de imagem.");
+      return;
+    }
+    if (file.size > 1_500_000) {
+      alert("Imagem muito grande. Use até 1,5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      setPreview(result);
+      setLogoValue(result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeLogo = () => {
+    setPreview(null);
+    setLogoValue("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
   return (
     <ActionForm
       action={saveSettingsAction}
+      hidden={{ logoUrl: logoValue }}
       submitLabel="Salvar configurações"
       successMessage="Configurações salvas."
     >
+      {preview && (
+        <div className="flex items-center gap-3 rounded-lg border bg-background p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview} alt="Logo da empresa" className="h-16 w-16 rounded object-contain" />
+          <div className="flex-1 text-xs text-muted-foreground">Logo atual</div>
+          <button
+            type="button"
+            onClick={removeLogo}
+            className="text-xs font-medium text-red-600 hover:underline"
+          >
+            Remover
+          </button>
+        </div>
+      )}
+      <Field label="Logo da empresa" htmlFor="cfg-logo" optional hint="PNG ou JPG até 1,5 MB. Aparece no cupom e relatórios.">
+        <input
+          id="cfg-logo"
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className={inputClass}
+          onChange={onFileChange}
+        />
+      </Field>
       <Field label="Nome fantasia" htmlFor="cfg-trade" required>
         <input id="cfg-trade" name="tradeName" className={inputClass} required maxLength={120} />
       </Field>

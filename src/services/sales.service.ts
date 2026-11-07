@@ -992,7 +992,7 @@ function buildReceipt(
     customer: { name: string; document: string | null } | null;
     operator: { name: string };
     branch: { name: string; document: string | null; address: string | null; city: string | null; state: string | null; phone: string | null };
-    tenant: { name: string; legalName: string | null; document: string | null; address: string | null; city: string | null; state: string | null; phone: string | null };
+    tenant: { name: string; legalName: string | null; document: string | null; address: string | null; city: string | null; state: string | null; phone: string | null; logoUrl: string | null };
     items: Array<{ description: string; sku: string; quantity: unknown; unitPrice: unknown; discount: unknown; total: unknown; variant: { color: string | null; size: string | null } | null }>;
     payments: Array<{ methodName: string; amount: unknown; installments: number }>;
   },
@@ -1011,6 +1011,7 @@ function buildReceipt(
       branchName: sale.branch.name,
       branchDocument: sale.branch.document,
       branchPhone: sale.branch.phone,
+      logoUrl: sale.tenant.logoUrl,
     },
     customerName: sale.customer?.name ?? null,
     customerDocument: sale.customer?.document ?? null,

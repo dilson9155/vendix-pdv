@@ -451,6 +451,7 @@ export const settingsSchema = z.object({
   allowNegativeStock: z.boolean().default(false),
   maxDiscountPercent: numberInput({ label: "Desconto máximo (%)", min: 0, max: 100, fallback: 10 }),
   requireCustomerOnCredit: z.boolean().default(true),
+  logoUrl: z.string().trim().max(2_000_000).optional(),
 });
 
 export const planSchema = z.object({

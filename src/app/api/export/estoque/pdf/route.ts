@@ -33,6 +33,7 @@ export async function GET(request: Request) {
 
   const bytes = await buildReportPdf({
     company: ctx.tenantName,
+    logoUrl: ctx.tenantLogoUrl,
     title: onlyLow ? "Posição de estoque — abaixo do mínimo" : "Posição de estoque",
     subtitle: `${data.totals.items} item(ns) · ${data.totals.belowMin} abaixo do mínimo`,
     period: `Emitido em ${formatDateBR(todayISO())}`,

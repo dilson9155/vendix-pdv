@@ -32,6 +32,7 @@ export type PdfSummaryItem = { label: string; value: string; strong?: boolean };
 
 export type ReportPdfInput<T> = {
   company: string;
+  logoUrl?: string | null;
   title: string;
   subtitle?: string;
   period?: string;
@@ -133,10 +134,26 @@ function drawAligned(
   });
 }
 
+async function embedLogoImage(doc: PDFDocument, dataUrl: string | null | undefined) {
+  if (!dataUrl) return null;
+  const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+  if (!match) return null;
+  const mime = match[1];
+  const bytes = Buffer.from(match[2], "base64");
+  try {
+    if (mime.includes("png")) return await doc.embedPng(bytes);
+    if (mime.includes("jpeg") || mime.includes("jpg")) return await doc.embedJpg(bytes);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export async function buildReportPdf<T>(input: ReportPdfInput<T>): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const logoImage = await embedLogoImage(doc, input.logoUrl);
 
   const pageWidth = input.landscape ? 841.89 : 595.28;
   const pageHeight = input.landscape ? 595.28 : 841.89;
@@ -150,10 +167,24 @@ export async function buildReportPdf<T>(input: ReportPdfInput<T>): Promise<Uint8
   const drawPageHeader = (page: PDFPage, first: boolean): number => {
     let y = pageHeight - MARGIN;
 
+    const logoSize = 34;
+    const logoOffset = logoImage ? logoSize + 8 : 0;
+    if (logoImage && logoImage.width && logoImage.height) {
+      const scale = Math.min(logoSize / logoImage.width, logoSize / logoImage.height);
+      const w = logoImage.width * scale;
+      const h = logoImage.height * scale;
+      page.drawImage(logoImage, {
+        x: MARGIN,
+        y: y - 12 - h + 4,
+        width: w,
+        height: h,
+      });
+    }
+
     drawAligned(page, input.company, {
-      x: MARGIN,
+      x: MARGIN + logoOffset,
       y: y - 12,
-      width: contentWidth * 0.7,
+      width: contentWidth * 0.7 - logoOffset,
       font: bold,
       size: 13,
     });

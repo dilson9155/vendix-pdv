@@ -97,6 +97,15 @@ export async function renderReceiptJpeg(receipt: ReceiptData): Promise<Buffer> {
     y += size + 7;
   };
 
+  // Logo da empresa
+  if (receipt.company.logoUrl) {
+    const logoSize = 96;
+    parts.push(
+      `<image href="${receipt.company.logoUrl}" x="${(WIDTH - logoSize) / 2}" y="${y}" width="${logoSize}" height="${logoSize}" preserveAspectRatio="xMidYMid meet"/>`
+    );
+    y += logoSize + 12;
+  }
+
   // Cabeçalho da empresa
   parts.push(text(fit(receipt.company.name, 34), y, { size: 30, weight: 700, anchor: "middle", x: WIDTH / 2 }));
   y += 34;

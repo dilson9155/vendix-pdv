@@ -10,6 +10,7 @@ export type AuthContext = {
   email: string;
   tenantId: string;
   tenantName: string;
+  tenantLogoUrl: string | null;
   tenantStatus: "ATIVO" | "SUSPENSO" | "CANCELADO";
   subscriptionStatus: string | null;
   planId: string | null;
@@ -45,6 +46,7 @@ export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
     email: user.email,
     tenantId: user.tenantId ?? "",
     tenantName: user.tenant?.name ?? "",
+    tenantLogoUrl: user.tenant?.logoUrl ?? null,
     tenantStatus: user.tenant?.status ?? "ATIVO",
     subscriptionStatus: user.tenant?.subscription?.status ?? null,
     planId: user.tenant?.planId ?? null,
