@@ -226,17 +226,35 @@ export function ReceivableDialog({
                 />
               </Field>
               {!isEdit && (
-                <Field label="Parcelas" htmlFor="recv-installments" optional hint="Até 36.">
-                  <input
-                    id="recv-installments"
-                    name="installments"
-                    type="number"
-                    min={1}
-                    max={36}
-                    className={inputClass}
-                    defaultValue={1}
-                  />
-                </Field>
+                <>
+                  <Field
+                    label="Valor informado"
+                    htmlFor="recv-value-mode"
+                    optional
+                    hint="Total é rateado entre as parcelas; por parcela mantém o valor em cada uma."
+                  >
+                    <select
+                      id="recv-value-mode"
+                      name="valueMode"
+                      className={selectClass}
+                      defaultValue="TOTAL"
+                    >
+                      <option value="TOTAL">Valor total (rateado)</option>
+                      <option value="INSTALLMENT">Valor de cada parcela</option>
+                    </select>
+                  </Field>
+                  <Field label="Parcelas" htmlFor="recv-installments" optional hint="Até 36.">
+                    <input
+                      id="recv-installments"
+                      name="installments"
+                      type="number"
+                      min={1}
+                      max={36}
+                      className={inputClass}
+                      defaultValue={1}
+                    />
+                  </Field>
+                </>
               )}
             </div>
             <Field label="Observações" htmlFor="recv-notes" optional>

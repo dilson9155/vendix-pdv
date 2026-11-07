@@ -339,6 +339,7 @@ export const payableSchema = z.object({
   competenceDate: dateInput,
   dueDate: dateInput,
   value: positiveMoneyInput,
+  valueMode: z.enum(["TOTAL", "INSTALLMENT"]).default("TOTAL"),
   installments: numberInput({ label: "Parcelas", integer: true, fallback: 1, min: 1, max: 36 }),
   notes: z.string().trim().max(500).optional(),
 });
@@ -355,6 +356,7 @@ export const receivableSchema = z.object({
   competenceDate: dateInput,
   dueDate: dateInput,
   value: positiveMoneyInput,
+  valueMode: z.enum(["TOTAL", "INSTALLMENT"]).default("TOTAL"),
   installments: numberInput({ label: "Parcelas", integer: true, fallback: 1, min: 1, max: 36 }),
   notes: z.string().trim().max(500).optional(),
 });

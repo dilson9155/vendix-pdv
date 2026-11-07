@@ -335,7 +335,11 @@ export async function saveReceivable(ctx: AuthContext, raw: unknown): Promise<{ 
   }
 
   const installments = Math.max(1, Math.min(36, input.installments ?? 1));
-  const parts = splitInstallments(input.value, installments);
+  const valueMode = (input as { valueMode?: string }).valueMode ?? "TOTAL";
+  const perInstallment = valueMode === "INSTALLMENT";
+  const parts = perInstallment
+    ? Array.from({ length: installments }, () => money(input.value))
+    : splitInstallments(input.value, installments);
   const groupId = installments > 1 ? randomUUID() : null;
   const firstDue = parseBusinessDate(input.dueDate) ?? new Date();
   const issueDate = parseBusinessDate(input.issueDate) ?? new Date();

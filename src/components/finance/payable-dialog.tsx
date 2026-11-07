@@ -227,17 +227,35 @@ export function PayableDialog({
                 />
               </Field>
               {!isEdit && (
-                <Field label="Parcelas" htmlFor="payable-installments" optional hint="Até 36.">
-                  <input
-                    id="payable-installments"
-                    name="installments"
-                    type="number"
-                    min={1}
-                    max={36}
-                    className={inputClass}
-                    defaultValue={1}
-                  />
-                </Field>
+                <>
+                  <Field
+                    label="Valor informado"
+                    htmlFor="payable-value-mode"
+                    optional
+                    hint="Total é rateado entre as parcelas; por parcela mantém o valor em cada uma."
+                  >
+                    <select
+                      id="payable-value-mode"
+                      name="valueMode"
+                      className={selectClass}
+                      defaultValue="TOTAL"
+                    >
+                      <option value="TOTAL">Valor total (rateado)</option>
+                      <option value="INSTALLMENT">Valor de cada parcela</option>
+                    </select>
+                  </Field>
+                  <Field label="Parcelas" htmlFor="payable-installments" optional hint="Até 36.">
+                    <input
+                      id="payable-installments"
+                      name="installments"
+                      type="number"
+                      min={1}
+                      max={36}
+                      className={inputClass}
+                      defaultValue={1}
+                    />
+                  </Field>
+                </>
               )}
             </div>
             <Field label="Observações" htmlFor="payable-notes" optional>
