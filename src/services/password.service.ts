@@ -36,8 +36,11 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
       console.error(`[email] falha no provedor (${response.status}): ${detail}`);
+      return false;
     }
-    return response.ok;
+    const result = await response.json().catch(() => ({}));
+    console.info(`[email] enviado com sucesso: ${JSON.stringify(result)}`);
+    return true;
   } catch (error) {
     console.error("[email] falha no provedor", error);
     return false;
