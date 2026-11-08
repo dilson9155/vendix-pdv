@@ -42,7 +42,25 @@ export default async function SettingsPage() {
         <section className="rounded-xl border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold">Empresa</h2>
           <div className="mt-3">
-            <CompanyForm logoUrl={company.logoUrl} />
+            <CompanyForm
+              initial={{
+                tradeName: company.name,
+                legalName: company.legalName,
+                document: company.document,
+                phone: company.phone,
+                email: company.email,
+                address: company.address,
+                city: company.city,
+                state: company.state,
+                zipCode: company.zipCode,
+                receiptFooter: preferences.receiptFooter,
+                receiptWidth: preferences.receiptWidth,
+                maxDiscountPercent: preferences.maxDiscountPercent,
+                allowNegativeStock: preferences.allowNegativeStock,
+                requireCustomerOnCredit: preferences.requireCustomerOnCredit,
+                logoUrl: company.logoUrl,
+              }}
+            />
           </div>
         </section>
 
