@@ -258,16 +258,28 @@ export async function renderReceiptJpeg(receipt: ReceiptData): Promise<Buffer> {
   const height = Math.ceil(y);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}"><rect width="${WIDTH}" height="${height}" fill="#ffffff"/><g font-family="${FONT_FAMILY}">${parts.join("")}</g></svg>`;
 
-  const png = new Resvg(svg, {
+  const resvg = new Resvg(svg, {
     font: {
       fontFiles: FONT_FILES,
       loadSystemFonts: false,
       defaultFontFamily: "DejaVu Sans",
     },
     fitTo: { mode: "width", value: WIDTH },
-  })
-    .render()
-    .asPng();
+  });
+
+  // Resvg não carrega imagens automaticamente: resolvemos data URLs manualmente.
+  for (const href of resvg.imagesToResolve()) {
+    const match = href.match(/^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/);
+    if (!match) continue;
+    try {
+      const buffer = Buffer.from(match[2], "base64");
+      resvg.resolveImage(href, buffer);
+    } catch {
+      // ignora imagem inválida
+    }
+  }
+
+  const png = resvg.render().asPng();
 
   return sharp(png).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
