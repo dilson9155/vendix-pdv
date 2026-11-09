@@ -103,7 +103,7 @@ export async function updateCompanySettings(ctx: AuthContext, raw: unknown): Pro
         city: input.city ?? null,
         state: input.state ?? null,
         zipCode: input.zipCode ?? null,
-        logoUrl: input.logoUrl || null,
+        ...(input.logoUrl ? { logoUrl: input.logoUrl } : {}),
       },
     });
     await setSetting(tx, ctx.tenantId, "receipt.width", input.receiptWidth, "pdv");

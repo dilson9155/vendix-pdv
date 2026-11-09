@@ -1,6 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: { serverActions: { bodySizeLimit: "4mb" } },
   serverExternalPackages: ["@prisma/client", "bcryptjs", "@resvg/resvg-js", "sharp"],
   // As fontes do cupom em JPEG são lidas do disco pelo servidor. Sem esta
   // inclusão o bundle da Vercel não leva os .ttf e o texto vira "tofu".

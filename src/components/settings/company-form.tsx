@@ -25,6 +25,7 @@ export type CompanyFormInitial = {
 export function CompanyForm({ initial }: { initial?: CompanyFormInitial | null }) {
   const [preview, setPreview] = useState<string | null>(initial?.logoUrl ?? null);
   const [logoValue, setLogoValue] = useState<string>(initial?.logoUrl ?? "");
+  const [logoChanged, setLogoChanged] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const onFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,6 +44,7 @@ export function CompanyForm({ initial }: { initial?: CompanyFormInitial | null }
       const result = String(reader.result || "");
       setPreview(result);
       setLogoValue(result);
+      setLogoChanged(true);
     };
     reader.readAsDataURL(file);
   };
@@ -50,13 +52,14 @@ export function CompanyForm({ initial }: { initial?: CompanyFormInitial | null }
   const removeLogo = () => {
     setPreview(null);
     setLogoValue("");
+    setLogoChanged(true);
     if (fileRef.current) fileRef.current.value = "";
   };
 
   return (
     <ActionForm
       action={saveSettingsAction}
-      hidden={{ logoUrl: logoValue }}
+      hidden={logoChanged ? { logoUrl: logoValue } : {}}
       booleanFields={["allowNegativeStock", "requireCustomerOnCredit"]}
       submitLabel="Salvar configurações"
       successMessage="Configurações salvas."
