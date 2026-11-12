@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/tenant";
 import { listLedger } from "@/services/finance-core.service";
+import { getTenantLogoUrl } from "@/services/settings.service";
 import { buildReportPdf, pdfFileName, pdfResponse, type PdfColumn } from "@/services/pdf.service";
 import { currentMonthISO, formatDateBR, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
@@ -27,6 +28,8 @@ export async function GET(request: Request) {
   let totals = { in: 0, out: 0, balance: 0 };
   let openingBalance = 0;
 
+  const logoPromise = getTenantLogoUrl(ctx.tenantId);
+
   for (let page = 1; page <= 50; page += 1) {
     const data = await listLedger(ctx, { from, to, branchId, page, pageSize });
     rows.push(...data.rows);
@@ -35,9 +38,11 @@ export async function GET(request: Request) {
     if (data.rows.length < pageSize) break;
   }
 
+  const logoUrl = await logoPromise;
+
   const bytes = await buildReportPdf({
     company: ctx.tenantName,
-    logoUrl: ctx.tenantLogoUrl,
+    logoUrl,
     title: "Livro caixa",
     subtitle: `${rows.length} lançamento(s)`,
     period: `Período: ${formatDateBR(from)} a ${formatDateBR(to)}`,

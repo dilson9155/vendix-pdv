@@ -1,6 +1,7 @@
 import "server-only";
 import bcrypt from "bcryptjs";
 import { cache } from "react";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { AuthContext } from "@/lib/tenant";
@@ -737,6 +738,7 @@ export async function saveNotice(ctx: AuthContext, raw: unknown) {
   const saved = input.id
     ? await prisma.platformNotice.update({ where: { id: input.id }, data })
     : await prisma.platformNotice.create({ data });
+  revalidateTag("platform-notices", "max");
   await auditLog({
     userId: ctx.userId,
     tenantId: null,
@@ -763,24 +765,35 @@ export async function listPlatformAudit(ctx: AuthContext, limit = 100) {
   });
 }
 
-export const listActiveNotices = cache(async (tenantId?: string | null) => {
-  const now = new Date();
-  const target = tenantId?.trim() || null;
-  return prisma.platformNotice.findMany({
-    where: {
-      active: true,
-      publishedAt: { lte: now },
-      AND: [
-        { OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
-        ...(target
-          ? [{ OR: [{ tenantIds: { isEmpty: true } }, { tenantIds: { has: target } }] }]
-          : []),
-      ],
-    },
-    orderBy: [{ level: "desc" }, { publishedAt: "desc" }],
-    take: 5,
-  });
-});
+/**
+ * Avisos da plataforma. Ficam em cache por 60s (e são invalidados ao salvar um
+ * aviso) porque o layout autenticado consulta isso em toda navegação.
+ */
+const fetchActiveNotices = unstable_cache(
+  async (target: string | null) => {
+    const now = new Date();
+    return prisma.platformNotice.findMany({
+      where: {
+        active: true,
+        publishedAt: { lte: now },
+        AND: [
+          { OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] },
+          ...(target
+            ? [{ OR: [{ tenantIds: { isEmpty: true } }, { tenantIds: { has: target } }] }]
+            : []),
+        ],
+      },
+      orderBy: [{ level: "desc" }, { publishedAt: "desc" }],
+      take: 5,
+    });
+  },
+  ["platform-notices"],
+  { revalidate: 60, tags: ["platform-notices"] }
+);
+
+export const listActiveNotices = cache((tenantId?: string | null) =>
+  fetchActiveNotices(tenantId?.trim() || null)
+);
 
 export async function platformChargeDefaults() {
   const tenants = await prisma.tenant.findMany({

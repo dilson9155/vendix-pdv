@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/tenant";
 import { getSalesReport } from "@/services/reports.service";
+import { getTenantLogoUrl } from "@/services/settings.service";
 import { buildReportPdf, pdfFileName, pdfResponse, type PdfColumn } from "@/services/pdf.service";
 import { currentMonthISO, formatDateBR, todayISO } from "@/lib/date";
 import { formatBRL } from "@/lib/money";
@@ -23,17 +24,20 @@ export async function GET(request: Request) {
   const from = url.searchParams.get("from") ?? `${currentMonthISO()}-01`;
   const to = url.searchParams.get("to") ?? todayISO();
 
-  const data = await getSalesReport(ctx, {
-    from,
-    to,
-    branchId: url.searchParams.get("branchId") ?? undefined,
-    status: url.searchParams.get("status") ?? undefined,
-    operatorId: url.searchParams.get("operatorId") ?? undefined,
-  });
+  const [data, logoUrl] = await Promise.all([
+    getSalesReport(ctx, {
+      from,
+      to,
+      branchId: url.searchParams.get("branchId") ?? undefined,
+      status: url.searchParams.get("status") ?? undefined,
+      operatorId: url.searchParams.get("operatorId") ?? undefined,
+    }),
+    getTenantLogoUrl(ctx.tenantId),
+  ]);
 
   const bytes = await buildReportPdf({
     company: ctx.tenantName,
-    logoUrl: ctx.tenantLogoUrl,
+    logoUrl,
     title: "Relatório de vendas",
     subtitle: `${data.totals.count} venda(s) concluída(s) · ${data.rows.length} linha(s)`,
     period: `Período: ${formatDateBR(from)} a ${formatDateBR(to)}`,

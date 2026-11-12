@@ -93,6 +93,20 @@ export async function getCompany(tenantId: string) {
   return tenant;
 }
 
+/**
+ * Logo da empresa sob demanda. Não entra no contexto de autenticação porque
+ * pode ter vários MB (data URL) e era carregada em toda navegação. Usada
+ * apenas na geração de PDFs.
+ */
+export async function getTenantLogoUrl(tenantId: string): Promise<string | null> {
+  if (!tenantId) return null;
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { logoUrl: true },
+  });
+  return tenant?.logoUrl ?? null;
+}
+
 export async function updateCompanySettings(ctx: AuthContext, raw: unknown): Promise<void> {
   assertPermission(ctx, "settings.manage");
   const input: SettingsInput = settingsSchema.parse(raw);

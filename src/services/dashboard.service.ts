@@ -294,7 +294,6 @@ async function getCashBlock(ctx: AuthContext, branchId: string | null) {
     orderBy: { openedAt: "desc" },
     include: {
       movements: { where: { type: { in: ["SUPRIMENTO", "SANGRIA", "VENDA", "ESTORNO"] } } },
-      sales: { where: { status: { in: ["CONCLUIDA", "DEVOLVIDA_PARCIAL"] } }, select: { id: true } },
     },
   });
   if (!session) {

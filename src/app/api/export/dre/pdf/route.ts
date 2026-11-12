@@ -1,5 +1,6 @@
 import { requirePermission } from "@/lib/tenant";
 import { getDre } from "@/services/dre.service";
+import { getTenantLogoUrl } from "@/services/settings.service";
 import { buildReportPdf, pdfFileName, pdfResponse, type PdfColumn } from "@/services/pdf.service";
 import { currentMonthISO, formatDateBR, todayISO } from "@/lib/date";
 import { formatBRL, formatPercent } from "@/lib/money";
@@ -28,7 +29,10 @@ export async function GET(request: Request) {
   const to = url.searchParams.get("to") ?? todayISO();
   const branchId = url.searchParams.get("branchId") ?? undefined;
 
-  const data = await getDre(ctx, { from, to, branchId });
+  const [data, logoUrl] = await Promise.all([
+    getDre(ctx, { from, to, branchId }),
+    getTenantLogoUrl(ctx.tenantId),
+  ]);
 
   const percentOfRevenue = (value: number): number | undefined => {
     if (!data.grossRevenue) return undefined;
@@ -64,7 +68,7 @@ export async function GET(request: Request) {
 
   const bytes = await buildReportPdf({
     company: ctx.tenantName,
-    logoUrl: ctx.tenantLogoUrl,
+    logoUrl,
     title: "DRE gerencial",
     subtitle: `${data.counts.sales} venda(s) · ${data.counts.expensePayables} despesa(s) · ${data.counts.manualEntries} lançamento(s) manual(is)`,
     period: `Período: ${formatDateBR(from)} a ${formatDateBR(to)}`,

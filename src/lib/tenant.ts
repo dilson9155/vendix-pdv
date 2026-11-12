@@ -10,7 +10,6 @@ export type AuthContext = {
   email: string;
   tenantId: string;
   tenantName: string;
-  tenantLogoUrl: string | null;
   tenantStatus: "ATIVO" | "SUSPENSO" | "CANCELADO";
   subscriptionStatus: string | null;
   planId: string | null;
@@ -23,48 +22,93 @@ export type AuthContext = {
   isPlatformAdmin: boolean;
 };
 
-/** Carrega a sessão + usuário + empresa + perfil a cada requisição (cached). */
+type AuthRow = {
+  id: string;
+  name: string;
+  email: string;
+  tenantId: string | null;
+  branchId: string | null;
+  roleId: string | null;
+  isPlatformAdmin: boolean;
+  active: boolean;
+  tenant_name: string | null;
+  tenant_status: "ATIVO" | "SUSPENSO" | "CANCELADO" | null;
+  plan_id: string | null;
+  plan_name: string | null;
+  subscription_status: string | null;
+  branch_name: string | null;
+  role_name: string | null;
+  role_permissions: string[] | null;
+  role_active: boolean | null;
+};
+
+/**
+ * Carrega a sessão + usuário + empresa + perfil a cada requisição (cached).
+ *
+ * Usa uma única consulta com JOINs. O Prisma carrega cada relação em uma
+ * consulta separada (~5 idas ao banco por requisição), e como o banco fica em
+ * outra região cada ida custa dezenas de milissegundos. A logo da empresa
+ * (`logoUrl`, que pode ter vários MB em data URL) também não é carregada aqui:
+ * só os PDFs precisam dela e a buscam sob demanda.
+ */
 export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   const session = await auth();
   const id = session?.user?.id;
   if (!id) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id },
-    include: {
-      tenant: { include: { subscription: true, plan: true } },
-      branch: { select: { id: true, name: true } },
-      role: { select: { id: true, name: true, permissions: true, active: true } },
-    },
-  });
+  const rows = await prisma.$queryRaw<AuthRow[]>`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u."tenantId" AS "tenantId",
+      u."branchId" AS "branchId",
+      u."roleId" AS "roleId",
+      u."isPlatformAdmin" AS "isPlatformAdmin",
+      u.active,
+      t.name AS tenant_name,
+      t.status AS tenant_status,
+      t."planId" AS plan_id,
+      p.name AS plan_name,
+      s.status AS subscription_status,
+      b.name AS branch_name,
+      r.name AS role_name,
+      r.permissions AS role_permissions,
+      r.active AS role_active
+    FROM users u
+    LEFT JOIN tenants t ON t.id = u."tenantId"
+    LEFT JOIN plans p ON p.id = t."planId"
+    LEFT JOIN subscriptions s ON s."tenantId" = t.id
+    LEFT JOIN branches b ON b.id = u."branchId"
+    LEFT JOIN roles r ON r.id = u."roleId"
+    WHERE u.id = ${id}
+    LIMIT 1
+  `;
 
+  const user = rows[0];
   if (!user || !user.active) return null;
 
-  const context: AuthContext = {
+  return {
     userId: user.id,
     name: user.name,
     email: user.email,
     tenantId: user.tenantId ?? "",
-    tenantName: user.tenant?.name ?? "",
-    tenantLogoUrl: user.tenant?.logoUrl ?? null,
-    tenantStatus: user.tenant?.status ?? "ATIVO",
-    subscriptionStatus: user.tenant?.subscription?.status ?? null,
-    planId: user.tenant?.planId ?? null,
-    planName: user.tenant?.plan?.name ?? null,
+    tenantName: user.tenant_name ?? "",
+    tenantStatus: user.tenant_status ?? "ATIVO",
+    subscriptionStatus: user.subscription_status ?? null,
+    planId: user.plan_id ?? null,
+    planName: user.plan_name ?? null,
     branchId: user.branchId ?? null,
-    branchName: user.branch?.name ?? null,
+    branchName: user.branch_name ?? null,
     roleId: user.roleId ?? null,
-    roleName: user.role?.active === false ? null : (user.role?.name ?? null),
-    permissions:
-      user.isPlatformAdmin
-        ? ["*"]
-        : user.role?.active === false
-          ? []
-          : (user.role?.permissions ?? []),
+    roleName: user.role_active === false ? null : (user.role_name ?? null),
+    permissions: user.isPlatformAdmin
+      ? ["*"]
+      : user.role_active === false
+        ? []
+        : (user.role_permissions ?? []),
     isPlatformAdmin: user.isPlatformAdmin,
   };
-
-  return context;
 });
 
 export function hasPermission(ctx: AuthContext, permission: string): boolean {

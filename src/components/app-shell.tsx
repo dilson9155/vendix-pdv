@@ -158,6 +158,7 @@ function NavContent({
                 <Link
                   key={item.href}
                   href={item.href}
+                  prefetch={false}
                   onClick={onNavigate}
                   aria-current={active ? "page" : undefined}
                   title={collapsed ? item.label : undefined}
@@ -254,6 +255,7 @@ function MobileNavCards({
                   <Link
                     key={item.href}
                     href={item.href}
+                    prefetch={false}
                     onClick={onNavigate}
                     aria-current={active ? "page" : undefined}
                     className={cn(
