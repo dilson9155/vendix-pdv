@@ -1,4 +1,5 @@
 import "server-only";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertPermission, assertBranchAccess, type AuthContext } from "@/lib/tenant";
@@ -236,12 +237,21 @@ export async function saveFinancialAccount(ctx: AuthContext, raw: unknown) {
 // Plano de contas
 // ---------------------------------------------------------------------------
 
-export async function listChartAccounts(ctx: AuthContext, includeInactive = false) {
-  assertPermission(ctx, "finance.view");
+async function fetchChartAccounts(tenantId: string, includeInactive: boolean) {
   return prisma.chartAccount.findMany({
-    where: { tenantId: ctx.tenantId, ...(includeInactive ? {} : { active: true }) },
+    where: { tenantId, ...(includeInactive ? {} : { active: true }) },
     orderBy: { code: "asc" },
   });
+}
+
+export async function listChartAccounts(ctx: AuthContext, includeInactive = false) {
+  assertPermission(ctx, "finance.view");
+  const cached = unstable_cache(
+    fetchChartAccounts,
+    ["chart-accounts"],
+    { revalidate: 300, tags: [`chart-accounts:${ctx.tenantId}`] }
+  );
+  return cached(ctx.tenantId, includeInactive);
 }
 
 export async function saveChartAccount(ctx: AuthContext, raw: unknown) {
@@ -286,6 +296,8 @@ export async function saveChartAccount(ctx: AuthContext, raw: unknown) {
     entityId: saved.id,
     description: `Conta contábil "${saved.code} ${saved.name}" ${existing ? "atualizada" : "criada"}`,
   });
+
+  revalidateTag(`chart-accounts:${ctx.tenantId}`, "max");
   return { id: saved.id };
 }
 
@@ -293,12 +305,21 @@ export async function saveChartAccount(ctx: AuthContext, raw: unknown) {
 // Centros de custo
 // ---------------------------------------------------------------------------
 
-export async function listCostCenters(ctx: AuthContext, includeInactive = false) {
-  assertPermission(ctx, "finance.view");
+async function fetchCostCenters(tenantId: string, includeInactive: boolean) {
   return prisma.costCenter.findMany({
-    where: { tenantId: ctx.tenantId, ...(includeInactive ? {} : { active: true }) },
+    where: { tenantId, ...(includeInactive ? {} : { active: true }) },
     orderBy: { code: "asc" },
   });
+}
+
+export async function listCostCenters(ctx: AuthContext, includeInactive = false) {
+  assertPermission(ctx, "finance.view");
+  const cached = unstable_cache(
+    fetchCostCenters,
+    ["cost-centers"],
+    { revalidate: 300, tags: [`cost-centers:${ctx.tenantId}`] }
+  );
+  return cached(ctx.tenantId, includeInactive);
 }
 
 export async function saveCostCenter(ctx: AuthContext, raw: unknown) {
@@ -327,6 +348,8 @@ export async function saveCostCenter(ctx: AuthContext, raw: unknown) {
     entityId: saved.id,
     description: `Centro de custo "${saved.name}" ${existing ? "atualizado" : "criado"}`,
   });
+
+  revalidateTag(`cost-centers:${ctx.tenantId}`, "max");
   return { id: saved.id };
 }
 
@@ -346,6 +369,7 @@ export async function deleteChartAccount(ctx: AuthContext, id: string) {
     throw new Error("Conta contábil em uso. Inative-a em vez de excluir.");
   }
   await prisma.chartAccount.delete({ where: { id } });
+  revalidateTag(`chart-accounts:${ctx.tenantId}`, "max");
   await auditLog({
     userId: ctx.userId,
     tenantId: ctx.tenantId,
@@ -372,6 +396,7 @@ export async function deleteCostCenter(ctx: AuthContext, id: string) {
     throw new Error("Centro de custo em uso. Inative-o em vez de excluir.");
   }
   await prisma.costCenter.delete({ where: { id } });
+  revalidateTag(`cost-centers:${ctx.tenantId}`, "max");
   await auditLog({
     userId: ctx.userId,
     tenantId: ctx.tenantId,

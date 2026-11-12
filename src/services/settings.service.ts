@@ -1,4 +1,5 @@
 import "server-only";
+import { revalidateTag, unstable_cache } from "next/cache";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertPermission, type AuthContext } from "@/lib/tenant";
@@ -28,7 +29,7 @@ const DEFAULTS: TenantPreferences = {
   isDemo: false,
 };
 
-export async function getTenantPreferences(tenantId: string): Promise<TenantPreferences> {
+async function fetchTenantPreferences(tenantId: string): Promise<TenantPreferences> {
   const rows = await prisma.tenantSetting.findMany({ where: { tenantId } });
   const map = new Map(rows.map((row) => [row.key, row.value]));
   const bool = (key: string, fallback: boolean) =>
@@ -58,6 +59,12 @@ export async function getTenantPreferences(tenantId: string): Promise<TenantPref
     isDemo: bool("company.demo", DEFAULTS.isDemo),
   };
 }
+
+export const getTenantPreferences = unstable_cache(
+  fetchTenantPreferences,
+  ["tenant-preferences"],
+  { revalidate: 300, tags: ["tenant-preferences"] }
+);
 
 async function setSetting(
   tx: Prisma.TransactionClient,
@@ -140,6 +147,8 @@ export async function updateCompanySettings(ctx: AuthContext, raw: unknown): Pro
     entityId: ctx.tenantId,
     description: "Configurações da empresa atualizadas",
   });
+
+  revalidateTag("tenant-preferences", "max");
 }
 
 // ---------------------------------------------------------------------------
